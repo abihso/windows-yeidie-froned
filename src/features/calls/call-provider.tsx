@@ -20,8 +20,6 @@ type PendingCalls = {
 };
 
 const emptyCalls: PendingCalls = { incoming: null, outgoing: null };
-const TEN_MINUTES_MS = 10 * 60 * 400;
-
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Unable to update this call.";
 }
@@ -45,13 +43,10 @@ function CallPrompt({
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
 
-  // Calculate seconds remaining out of a 10-minute duration based on expiresAt
   const [seconds, setSeconds] = useState(() =>
     Math.max(
       0,
-      Math.ceil(
-        (Date.parse(invitation.expiresAt) + TEN_MINUTES_MS - Date.now()) / 1000,
-      ),
+      Math.ceil((Date.parse(invitation.expiresAt) - Date.now()) / 1000),
     ),
   );
 
@@ -72,10 +67,7 @@ function CallPrompt({
       setSeconds(
         Math.max(
           0,
-          Math.ceil(
-            (Date.parse(invitation.expiresAt) + TEN_MINUTES_MS - Date.now()) /
-              1000,
-          ),
+          Math.ceil((Date.parse(invitation.expiresAt) - Date.now()) / 1000),
         ),
       );
     }, 1000);
@@ -395,6 +387,16 @@ export function CallProvider({ children }: { children: ReactNode }) {
           }
         });
         nextSocket.on("call:request", showIncoming);
+        nextSocket.on(
+          "call:invited",
+          (payload: { callId?: string; call?: { id?: string } }) => {
+            const callId = payload.callId ?? payload.call?.id;
+            if (!callId || disposed) return;
+            navigateRef.current(
+              `/callroom/groups-call?callId=${encodeURIComponent(callId)}`,
+            );
+          },
+        );
         nextSocket.on("call:accepted", accepted);
         nextSocket.on("call:rejected", (invitation: CallInvitation) => {
           settled(invitation.requestId);

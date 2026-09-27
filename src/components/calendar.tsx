@@ -115,6 +115,7 @@ export default function Calendar() {
       }}
     >
       <Box
+        className="mobile-calendar"
         sx={{
           width: 580,
           backgroundColor: "#f0effc",

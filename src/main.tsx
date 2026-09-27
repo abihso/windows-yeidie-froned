@@ -13,6 +13,7 @@ import Feeds from "./modules/dashboard/tabs/feeds.tsx";
 import Messages from "./modules/dashboard/tabs/messages.tsx";
 import CallRoom from "./modules/dashboard/call-room/index.tsx";
 import TwoPeopleCall from "./modules/dashboard/call-room/two-people-call.tsx";
+import GroupsCalls from "./modules/dashboard/call-room/groups-call.tsx";
 import { CallProvider } from "./features/calls/call-provider.tsx";
 
 createRoot(document.getElementById("root")!).render(
@@ -28,8 +29,11 @@ createRoot(document.getElementById("root")!).render(
           <Route path="/dashboard/discovery" element={<Discover />} />
           <Route path="/dashboard/feeds" element={<Feeds />} />
           <Route path="/dashboard/messages" element={<Messages />} />
+          <Route path="/dashboard/admin" element={<Dashboard />} />
+          <Route path="/dashboard/counsellor" element={<Dashboard />} />
           <Route path="/callroom/session" element={<CallRoom />} />
           <Route path="/callroom/two-people-call" element={<TwoPeopleCall />} />
+          <Route path="/callroom/groups-call" element={<GroupsCalls />} />
         </Routes>
       </CallProvider>
     </BrowserRouter>

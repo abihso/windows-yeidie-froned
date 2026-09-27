@@ -501,7 +501,7 @@ function CallSession({ callId }: { callId: string }) {
   const canControl = Boolean(localStream) && !terminal && !ending;
 
   return (
-    <div className="grid gap-2 grid-cols-12 h-screen p-2 overflow-hidden">
+    <div className="mobile-two-call grid gap-2 grid-cols-12 h-screen p-2 overflow-hidden">
       <div className="col-span-8 gap-2 h-full flex">
         <div className="flex relative flex-col items-center pt-7 pb-20 w-20 h-full border bg-color4 rounded-3xl shrink-0">
           <Avatar className="h-11 w-11 shrink-0 cursor-pointer">

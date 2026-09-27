@@ -1,0 +1,10 @@
+import { defineConfig } from "drizzle-kit";
+
+export default defineConfig({
+  dialect: "postgresql", // Or "mysql", "sqlite", "turso" depending on your database
+  schema: "./src/db/schema.ts", // Path to your schema file(s)
+  out: "./drizzle",             // Migration files output folder
+  dbCredentials: {
+    url: process.env.DATABASE_URL!, // Your DB connection string
+  },
+});

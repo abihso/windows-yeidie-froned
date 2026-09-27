@@ -22,7 +22,7 @@ export type User = {
   id: string;
   fullName: string;
   email: string;
-  role: "client" | "counsellor";
+  role: "client" | "counsellor" | "admin";
   bio?: string;
   specialties?: string[];
   followerCount?: number;
@@ -32,6 +32,52 @@ export type User = {
 
 export type Counsellor = Pick<User, "id" | "fullName" | "bio" | "specialties">;
 
+export type AvailabilitySlot = {
+  id: string;
+  counsellorId: string;
+  startsAt: string;
+  endsAt: string;
+  createdAt: string;
+};
+
+export type Booking = {
+  id: string;
+  slotId: string;
+  clientId: string;
+  counsellorId: string;
+  status: "pending" | "confirmed" | "cancelled" | "completed";
+  note: string;
+  startsAt: string;
+  endsAt: string;
+  counsellorName: string;
+  clientName: string;
+};
+
+export type ConversationMember = {
+  id: string;
+  fullName: string;
+  role: string;
+  membershipRole: string;
+};
+
+export type LatestMessage = {
+  id: string;
+  conversationId: string;
+  senderId: string;
+  body: string;
+  createdAt: string;
+};
+
+export type Conversation = {
+  id: string;
+  kind: "direct" | "group";
+  title: string | null;
+  createdBy: string;
+  createdAt: string;
+  members: ConversationMember[];
+  latestMessage: LatestMessage | null;
+};
+
 export type CallRoom = {
   id: string;
   conversationId: string | null;
@@ -40,6 +86,12 @@ export type CallRoom = {
   mode: "audio" | "video";
   createdAt: string;
   endedAt: string | null;
+};
+
+export type CreateCallInput = {
+  conversationId?: string;
+  bookingId?: string;
+  mode?: "audio" | "video";
 };
 
 export type PostComment = {
@@ -153,23 +205,112 @@ export const api = {
       csrfToken = body.csrfToken;
       return body.user;
     }),
+  updateMe: (input: {
+    fullName?: string;
+    bio?: string;
+    specialties?: string[];
+  }) =>
+    request<{ user: User }>("/users/me", {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    }).then((body) => body.user),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<void>("/auth/password", {
+      method: "PATCH",
+      body: JSON.stringify({ currentPassword, newPassword }),
+    }),
   user: (id: string) =>
     request<{ user: User }>(`/users/${id}`).then((body) => body.user),
   csrf: getCsrfToken,
   call: (id: string) =>
     request<{ call: CallRoom }>(`/calls/${encodeURIComponent(id)}`),
+  createCall: (input: CreateCallInput) =>
+    request<{ call: CallRoom }>("/calls", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
   callIce: () =>
-    request<{ iceServers: RTCIceServer[]; expiresAt: string | null }>("/calls/ice"),
+    request<{ iceServers: RTCIceServer[]; expiresAt: string | null }>(
+      "/calls/ice",
+    ),
   endCall: (id: string) =>
     request<{ call: CallRoom }>(`/calls/${encodeURIComponent(id)}/end`, {
       method: "POST",
     }),
-  users: (search = "") =>
-    request<{ users: User[] }>(`/users?search=${encodeURIComponent(search)}`),
+  users: (search = "", role?: User["role"] | "admin") => {
+    const qs = role
+      ? `?search=${encodeURIComponent(search)}&role=${encodeURIComponent(role)}`
+      : `?search=${encodeURIComponent(search)}`;
+    return request<{ users: User[] }>(`/users${qs}`);
+  },
+  updateUserRole: (id: string, role: User["role"] | "admin") =>
+    request<{ user: User }>(`/users/${encodeURIComponent(id)}/role`, {
+      method: "PATCH",
+      body: JSON.stringify({ role }),
+    }),
   counsellors: (search = "") =>
     request<{ counsellors: Counsellor[] }>(
       `/counsellors?search=${encodeURIComponent(search)}`,
     ),
+  counsellorAvailability: (counsellorId: string) =>
+    request<{ slots: AvailabilitySlot[] }>(
+      `/counsellors/${encodeURIComponent(counsellorId)}/availability`,
+    ),
+  createAvailability: (startsAt: string, endsAt: string) =>
+    request<{ slot: AvailabilitySlot }>("/counsellors/availability", {
+      method: "POST",
+      body: JSON.stringify({ startsAt, endsAt }),
+    }),
+  deleteAvailability: (slotId: string) =>
+    request<void>(`/counsellors/availability/${encodeURIComponent(slotId)}`, {
+      method: "DELETE",
+    }),
+  bookings: () => request<{ bookings: Booking[] }>("/bookings"),
+  updateBookingStatus: (id: string, status: Booking["status"]) =>
+    request<{ booking: Booking }>(
+      `/bookings/${encodeURIComponent(id)}/status`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ status }),
+      },
+    ),
+  createBooking: (slotId: string, note = "") =>
+    request<{ booking: Booking }>("/bookings", {
+      method: "POST",
+      body: JSON.stringify({ slotId, note }),
+    }),
+  conversations: () =>
+    request<{ conversations: Conversation[] }>("/conversations"),
+  createGroup: (title: string, memberIds: string[]) =>
+    request<{ conversation: Conversation }>("/conversations", {
+      method: "POST",
+      body: JSON.stringify({ kind: "group", title, memberIds }),
+    }),
+  renameGroup: (id: string, title: string) =>
+    request<{ conversation: Conversation }>(
+      `/conversations/${encodeURIComponent(id)}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ title }),
+      },
+    ),
+  addGroupMember: (id: string, memberId: string) =>
+    request<{ members: ConversationMember[] }>(
+      `/conversations/${encodeURIComponent(id)}/members`,
+      {
+        method: "POST",
+        body: JSON.stringify({ memberId }),
+      },
+    ),
+  removeGroupMember: (id: string, memberId: string) =>
+    request<void>(
+      `/conversations/${encodeURIComponent(id)}/members/${encodeURIComponent(memberId)}`,
+      { method: "DELETE" },
+    ),
+  deleteGroup: (id: string) =>
+    request<void>(`/conversations/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }),
   posts: () => request<{ posts: Post[] }>("/posts"),
   likePost: (postId: string) =>
     request<{ liked: boolean; likes: number }>(`/posts/${postId}/like`, {

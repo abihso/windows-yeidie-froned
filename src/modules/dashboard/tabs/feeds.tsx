@@ -22,6 +22,8 @@ import ShareOutlineIcon from "@iconify-react/cuida/share-outline";
 import SearchIcon from "@iconify-react/glyphs/search";
 import { useEffect, useRef, useState } from "react";
 import { api, normalizeMediaUrl, type User } from "../../../lib/api";
+import { MobileBottomNav } from "../../../components/mobile-bottom-nav";
+import { Skeleton } from "@/components/ui/skeleton";
 
 import {
   Select,
@@ -84,6 +86,7 @@ const Feeds = () => {
     Array<User & { isFollowing?: boolean }>
   >([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
+  const [loadingPosts, setLoadingPosts] = useState(true);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -141,6 +144,9 @@ const Feeds = () => {
       })
       .catch(() => {
         setPosts([]);
+      })
+      .finally(() => {
+        setLoadingPosts(false);
       });
 
     const loadSuggestedUsers = async () => {
@@ -492,10 +498,10 @@ const Feeds = () => {
 
   // Class string for independent scrolling with invisible scrollbar
   const scrollableColumnClass =
-    "h-full overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden";
+    "mobile-feeds-scroll h-full overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden";
 
   return (
-    <div className="h-screen flex flex-col p-2 sm:p-4 overflow-hidden">
+    <div className="mobile-feeds h-screen flex flex-col p-2 sm:p-4 overflow-hidden">
       {/*  Header */}
       <div className="relative flex flex-col sm:flex-row justify-center items-center gap-2 mb-3 shrink-0">
         <p
@@ -517,9 +523,9 @@ const Feeds = () => {
       </div>
 
       {/* Main Column Grid Container */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 flex-1 overflow-hidden">
+      <div className="mobile-feeds-grid grid grid-cols-1 lg:grid-cols-12 gap-3 flex-1 overflow-hidden">
         {/* Left Side & Main Content Wrapper */}
-        <div className="lg:col-span-10 grid grid-cols-1 lg:grid-cols-12 gap-3 h-full overflow-hidden">
+        <div className="mobile-feeds-content lg:col-span-10 grid grid-cols-1 lg:grid-cols-12 gap-3 h-full overflow-hidden">
           {/* 1. LEFT SIDEBAR (Scrolls independently) */}
           <div
             className={`lg:col-span-3 space-y-4 pr-1 ${scrollableColumnClass}`}
@@ -586,13 +592,25 @@ const Feeds = () => {
               </div>
               <div className="space-y-1 px-2 mt-2">
                 {[
-                  {link : "home", icon: HomeBrokenIcon, label: "Home" },
-                  {link : "discover", icon: DiscoverOutlinedIcon, label: "Discover" },
-                  {link : "saved", icon: SaveIcon, label: "Saved" },
-                  {link : "add-post", icon: PlusIcon, label: "Add Post" },
-                  {link : "chats", icon: CommentOutlineIcon, label: "Chats" },
-                  {link : "communities", icon: PeopleGroupIcon, label: "Communities" },
-                  {link : "", icon: NotificationLineIcon, label: "Notification" },
+                  { link: "home", icon: HomeBrokenIcon, label: "Home" },
+                  {
+                    link: "discover",
+                    icon: DiscoverOutlinedIcon,
+                    label: "Discover",
+                  },
+                  { link: "saved", icon: SaveIcon, label: "Saved" },
+                  { link: "add-post", icon: PlusIcon, label: "Add Post" },
+                  { link: "chats", icon: CommentOutlineIcon, label: "Chats" },
+                  {
+                    link: "communities",
+                    icon: PeopleGroupIcon,
+                    label: "Communities",
+                  },
+                  {
+                    link: "",
+                    icon: NotificationLineIcon,
+                    label: "Notification",
+                  },
                 ].map((item, idx) => {
                   const Icon = item.icon;
                   return (
@@ -790,183 +808,213 @@ const Feeds = () => {
             </div>
 
             {/* Feed Posts */}
-            {posts.map((post) => (
-              <div
-                key={post.id}
-                className="min-h-44 rounded-2xl border border-color1 px-3 py-4 space-y-3 transition-all duration-300 hover:shadow-md hover:-translate-y-0.5 shrink-0"
-              >
-                <div className="flex justify-between items-start gap-2">
-                  <div className="flex gap-3">
+            {loadingPosts ? (
+              <div className="space-y-3">
+                {[1, 2, 3].map((item) => (
+                  <div
+                    key={item}
+                    className="space-y-4 rounded-2xl border border-color1 px-3 py-4"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Skeleton className="h-8 w-8 rounded-full" />
+                      <div className="space-y-2">
+                        <Skeleton className="h-2.5 w-36" />
+                        <Skeleton className="h-2 w-20" />
+                      </div>
+                    </div>
+                    <Skeleton className="h-3 w-4/5" />
+                    <Skeleton className="h-48 w-full rounded-xl" />
+                  </div>
+                ))}
+              </div>
+            ) : posts.length === 0 ? (
+              <p className="rounded-2xl border border-dashed border-color1 p-6 text-center text-sm text-slate-500">
+                No posts yet.
+              </p>
+            ) : (
+              posts.map((post) => (
+                <div
+                  key={post.id}
+                  className="min-h-44 rounded-2xl border border-color1 px-3 py-4 space-y-3 transition-all duration-300 hover:shadow-md hover:-translate-y-0.5 shrink-0"
+                >
+                  <div className="flex justify-between items-start gap-2">
+                    <div className="flex gap-3">
+                      <Avatar className="h-8 w-8 shrink-0 transition-transform duration-200 hover:scale-110 cursor-pointer">
+                        <AvatarImage src="https://github.com/shadcn.png" />
+                        <AvatarFallback>CN</AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className="text-xs font-semibold">
+                          {post.authorName}{" "}
+                          <span className="text-[10px] text-[#656565] font-normal">
+                            {post.authorHandle} {post.createdAt}
+                          </span>
+                        </p>
+                        <p className="text-xs mt-2">{post.message}</p>
+                      </div>
+                    </div>
+                    <div className="shrink-0 p-1 rounded-full transition-transform duration-200 hover:scale-125 active:scale-90 hover:bg-black/5 dark:hover:bg-white/5">
+                      <ThreeDotsIcon height="1em" className="cursor-pointer" />
+                    </div>
+                  </div>
+
+                  {post.mediaType === "image" && post.mediaUrl && (
+                    <div className="overflow-hidden rounded-xl mt-3">
+                      <img
+                        src={post.mediaUrl}
+                        className="h-48 w-full object-cover rounded-xl transition-transform duration-500 hover:scale-105 cursor-pointer"
+                        alt="Post media"
+                      />
+                    </div>
+                  )}
+
+                  {post.mediaType === "video" && post.mediaUrl && (
+                    <div className="overflow-hidden rounded-xl mt-3">
+                      <video
+                        src={post.mediaUrl}
+                        controls
+                        className="h-48 w-full object-cover rounded-xl bg-black"
+                      />
+                    </div>
+                  )}
+
+                  <div className="h-10 flex flex-wrap gap-4 sm:gap-14 items-center">
+                    <div
+                      onClick={() => handleLikeToggle(post.id)}
+                      className="flex gap-1.5 items-center cursor-pointer group transition-transform duration-200 hover:-translate-y-0.5 active:scale-90"
+                    >
+                      <LikeIcon
+                        height="1em"
+                        color={post.liked ? "#ef4444" : "#6b7280"}
+                        className="transition-transform duration-200 group-hover:scale-125"
+                      />
+                      <p
+                        className={`text-[10px] font-bold transition-colors ${
+                          post.liked
+                            ? "text-red-500"
+                            : "group-hover:text-red-500"
+                        }`}
+                      >
+                        {formatCompactCount(post.likes)}
+                      </p>
+                    </div>
+                    <div className="flex gap-1.5 items-center cursor-pointer group transition-transform duration-200 hover:-translate-y-0.5 active:scale-90">
+                      <MessageRoundIcon
+                        height="1em"
+                        className="transition-transform duration-200 group-hover:scale-125"
+                      />
+                      <p className="text-[10px] font-bold transition-colors group-hover:text-blue-500">
+                        {formatCompactCount(post.comments.length)}
+                      </p>
+                    </div>
+                    <div
+                      onClick={() => handleRepostToggle(post.id)}
+                      className="flex gap-1.5 items-center cursor-pointer group transition-transform duration-200 hover:-translate-y-0.5 active:scale-90"
+                    >
+                      <RepostIcon
+                        height="1em"
+                        color={post.reposted ? "#16a34a" : "#6b7280"}
+                        className="transition-transform duration-200 group-hover:scale-125"
+                      />
+                      <p
+                        className={`text-[10px] font-bold transition-colors ${
+                          post.reposted
+                            ? "text-green-500"
+                            : "group-hover:text-green-500"
+                        }`}
+                      >
+                        {formatCompactCount(post.reposts)}
+                      </p>
+                    </div>
+                    <div
+                      onClick={() => handleSaveToggle(post.id)}
+                      className="flex gap-1.5 items-center cursor-pointer group transition-transform duration-200 hover:-translate-y-0.5 active:scale-90"
+                    >
+                      <SaveAddIcon
+                        height="1em"
+                        color={post.saved ? "#f59e0b" : "#6b7280"}
+                        className="transition-transform duration-200 group-hover:scale-125"
+                      />
+                      <p
+                        className={`text-[10px] font-bold transition-colors ${
+                          post.saved
+                            ? "text-yellow-500"
+                            : "group-hover:text-yellow-500"
+                        }`}
+                      >
+                        {formatCompactCount(post.saves)}
+                      </p>
+                    </div>
+                    <div
+                      onClick={() => handleShare(post.id)}
+                      className="flex gap-1.5 items-center cursor-pointer group transition-transform duration-200 hover:-translate-y-0.5 active:scale-90"
+                    >
+                      <ShareOutlineIcon
+                        height="1em"
+                        className="transition-transform duration-200 group-hover:scale-125"
+                      />
+                      <p className="text-[10px] font-bold transition-colors group-hover:text-purple-500">
+                        {formatCompactCount(post.shares)}
+                      </p>
+                    </div>
+                  </div>
+
+                  {post.comments.length > 0 && (
+                    <div className="space-y-2 rounded-xl bg-[#F5F6F8] p-2">
+                      {post.comments.slice(-2).map((comment) => (
+                        <div
+                          key={comment.id}
+                          className="flex gap-2 items-start"
+                        >
+                          <Avatar className="h-6 w-6 shrink-0">
+                            <AvatarFallback className="text-[8px]">
+                              {comment.authorName
+                                .split(" ")
+                                .map((part) => part[0])
+                                .slice(0, 2)
+                                .join("")
+                                .toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="min-w-0">
+                            <p className="text-[9px] font-semibold">
+                              {comment.authorName}
+                            </p>
+                            <p className="text-[9px] text-gray-600 break-words">
+                              {comment.body}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="flex gap-3 items-center">
                     <Avatar className="h-8 w-8 shrink-0 transition-transform duration-200 hover:scale-110 cursor-pointer">
                       <AvatarImage src="https://github.com/shadcn.png" />
                       <AvatarFallback>CN</AvatarFallback>
                     </Avatar>
-                    <div>
-                      <p className="text-xs font-semibold">
-                        {post.authorName}{" "}
-                        <span className="text-[10px] text-[#656565] font-normal">
-                          {post.authorHandle} {post.createdAt}
-                        </span>
-                      </p>
-                      <p className="text-xs mt-2">{post.message}</p>
+                    <div className="w-full relative">
+                      <input
+                        value={commentDrafts[post.id] ?? ""}
+                        onChange={(event) =>
+                          handleCommentDraftChange(post.id, event.target.value)
+                        }
+                        className="bg-[#DCDFE5] h-9 w-full rounded-2xl text-xs text-[#656565] flex items-center pl-4 pr-9 outline-none transition-all duration-200 focus:ring-2 focus:ring-[#1900FF]/40 focus:bg-white"
+                        placeholder="Write a comment"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleAddComment(post.id)}
+                        className="absolute right-2 top-1.5 rounded-full bg-[#1900FF] px-2 py-1 text-[9px] font-bold text-white transition-all hover:brightness-110 active:scale-95"
+                      >
+                        Post
+                      </button>
                     </div>
                   </div>
-                  <div className="shrink-0 p-1 rounded-full transition-transform duration-200 hover:scale-125 active:scale-90 hover:bg-black/5 dark:hover:bg-white/5">
-                    <ThreeDotsIcon height="1em" className="cursor-pointer" />
-                  </div>
                 </div>
-
-                {post.mediaType === "image" && post.mediaUrl && (
-                  <div className="overflow-hidden rounded-xl mt-3">
-                    <img
-                      src={post.mediaUrl}
-                      className="h-48 w-full object-cover rounded-xl transition-transform duration-500 hover:scale-105 cursor-pointer"
-                      alt="Post media"
-                    />
-                  </div>
-                )}
-
-                {post.mediaType === "video" && post.mediaUrl && (
-                  <div className="overflow-hidden rounded-xl mt-3">
-                    <video
-                      src={post.mediaUrl}
-                      controls
-                      className="h-48 w-full object-cover rounded-xl bg-black"
-                    />
-                  </div>
-                )}
-
-                <div className="h-10 flex flex-wrap gap-4 sm:gap-14 items-center">
-                  <div
-                    onClick={() => handleLikeToggle(post.id)}
-                    className="flex gap-1.5 items-center cursor-pointer group transition-transform duration-200 hover:-translate-y-0.5 active:scale-90"
-                  >
-                    <LikeIcon
-                      height="1em"
-                      color={post.liked ? "#ef4444" : "#6b7280"}
-                      className="transition-transform duration-200 group-hover:scale-125"
-                    />
-                    <p
-                      className={`text-[10px] font-bold transition-colors ${
-                        post.liked ? "text-red-500" : "group-hover:text-red-500"
-                      }`}
-                    >
-                      {formatCompactCount(post.likes)}
-                    </p>
-                  </div>
-                  <div className="flex gap-1.5 items-center cursor-pointer group transition-transform duration-200 hover:-translate-y-0.5 active:scale-90">
-                    <MessageRoundIcon
-                      height="1em"
-                      className="transition-transform duration-200 group-hover:scale-125"
-                    />
-                    <p className="text-[10px] font-bold transition-colors group-hover:text-blue-500">
-                      {formatCompactCount(post.comments.length)}
-                    </p>
-                  </div>
-                  <div
-                    onClick={() => handleRepostToggle(post.id)}
-                    className="flex gap-1.5 items-center cursor-pointer group transition-transform duration-200 hover:-translate-y-0.5 active:scale-90"
-                  >
-                    <RepostIcon
-                      height="1em"
-                      color={post.reposted ? "#16a34a" : "#6b7280"}
-                      className="transition-transform duration-200 group-hover:scale-125"
-                    />
-                    <p
-                      className={`text-[10px] font-bold transition-colors ${
-                        post.reposted
-                          ? "text-green-500"
-                          : "group-hover:text-green-500"
-                      }`}
-                    >
-                      {formatCompactCount(post.reposts)}
-                    </p>
-                  </div>
-                  <div
-                    onClick={() => handleSaveToggle(post.id)}
-                    className="flex gap-1.5 items-center cursor-pointer group transition-transform duration-200 hover:-translate-y-0.5 active:scale-90"
-                  >
-                    <SaveAddIcon
-                      height="1em"
-                      color={post.saved ? "#f59e0b" : "#6b7280"}
-                      className="transition-transform duration-200 group-hover:scale-125"
-                    />
-                    <p
-                      className={`text-[10px] font-bold transition-colors ${
-                        post.saved
-                          ? "text-yellow-500"
-                          : "group-hover:text-yellow-500"
-                      }`}
-                    >
-                      {formatCompactCount(post.saves)}
-                    </p>
-                  </div>
-                  <div
-                    onClick={() => handleShare(post.id)}
-                    className="flex gap-1.5 items-center cursor-pointer group transition-transform duration-200 hover:-translate-y-0.5 active:scale-90"
-                  >
-                    <ShareOutlineIcon
-                      height="1em"
-                      className="transition-transform duration-200 group-hover:scale-125"
-                    />
-                    <p className="text-[10px] font-bold transition-colors group-hover:text-purple-500">
-                      {formatCompactCount(post.shares)}
-                    </p>
-                  </div>
-                </div>
-
-                {post.comments.length > 0 && (
-                  <div className="space-y-2 rounded-xl bg-[#F5F6F8] p-2">
-                    {post.comments.slice(-2).map((comment) => (
-                      <div key={comment.id} className="flex gap-2 items-start">
-                        <Avatar className="h-6 w-6 shrink-0">
-                          <AvatarFallback className="text-[8px]">
-                            {comment.authorName
-                              .split(" ")
-                              .map((part) => part[0])
-                              .slice(0, 2)
-                              .join("")
-                              .toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="min-w-0">
-                          <p className="text-[9px] font-semibold">
-                            {comment.authorName}
-                          </p>
-                          <p className="text-[9px] text-gray-600 break-words">
-                            {comment.body}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                <div className="flex gap-3 items-center">
-                  <Avatar className="h-8 w-8 shrink-0 transition-transform duration-200 hover:scale-110 cursor-pointer">
-                    <AvatarImage src="https://github.com/shadcn.png" />
-                    <AvatarFallback>CN</AvatarFallback>
-                  </Avatar>
-                  <div className="w-full relative">
-                    <input
-                      value={commentDrafts[post.id] ?? ""}
-                      onChange={(event) =>
-                        handleCommentDraftChange(post.id, event.target.value)
-                      }
-                      className="bg-[#DCDFE5] h-9 w-full rounded-2xl text-xs text-[#656565] flex items-center pl-4 pr-9 outline-none transition-all duration-200 focus:ring-2 focus:ring-[#1900FF]/40 focus:bg-white"
-                      placeholder="Write a comment"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => handleAddComment(post.id)}
-                      className="absolute right-2 top-1.5 rounded-full bg-[#1900FF] px-2 py-1 text-[9px] font-bold text-white transition-all hover:brightness-110 active:scale-95"
-                    >
-                      Post
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
 
@@ -1101,6 +1149,7 @@ const Feeds = () => {
           </div>
         </div>
       </div>
+      <MobileBottomNav />
     </div>
   );
 };

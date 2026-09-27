@@ -63,6 +63,8 @@
     "clsx": "^2.1.1",
     "date-fns": "^4.4.0",
     "dayjs": "^1.11.21",
+    "drizzle-kit": "^0.31.11",
+    "drizzle-orm": "^0.45.3",
     "lucide-react": "^1.30.0",
     "react": "^19.2.8",
     "react-day-picker": "^10.0.1",
@@ -94,6 +96,9 @@
     "vite": "^8.2.0"
   },
   "allowScripts": {
-    "fsevents@2.3.3": true
+    "fsevents@2.3.3": true,
+    "esbuild@0.18.20": true,
+    "esbuild@0.25.12": true,
+    "esbuild@0.28.2": true
   }
 }

@@ -11,16 +11,20 @@ import DiscoverLightIcon from "@iconify-react/iconamoon/discover-light";
 import OrganizationIcon from "@iconify-react/grommet-icons/organization";
 import { Images } from "../../../assets/images";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Skeleton } from "@/components/ui/skeleton";
 import VideoOutlineIcon from "@iconify-react/basil/video-outline";
 import CallOutlineIcon from "@iconify-react/famicons/call-outline";
+import { LoaderCircle } from "lucide-react";
 import MenuDots16Icon from "@iconify-react/qlementine-icons/menu-dots-16";
 import PlusIcon from "@iconify-react/akar-icons/plus";
 import StickerEmojiIcon from "@iconify-react/mdi/sticker-emoji";
 import Emoji2LineIcon from "@iconify-react/mingcute/emoji-2-line";
 import MicIcon from "@iconify-react/codicon/mic";
 import { useRef, useState, useEffect } from "react";
-import { type User } from "../../../lib/api";
+import { useNavigate } from "react-router-dom";
+import { api, type Conversation, type User } from "../../../lib/api";
 import { useCalls } from "../../../features/calls/call-context";
+import { MobileBottomNav } from "../../../components/mobile-bottom-nav";
 
 const API_BASE_URL = (
   import.meta.env.VITE_API_URL ?? "http://localhost:4000/api"
@@ -66,18 +70,48 @@ const mergeMessages = (messages: ChatMessage[]) =>
 
 const MessagesPanel = () => {
   const { user: currentUser, socket, connected, busy, startCall } = useCalls();
+  const navigate = useNavigate();
   const [followingUsers, setFollowingUsers] = useState<User[]>([]);
+  const [groupConversations, setGroupConversations] = useState<Conversation[]>(
+    [],
+  );
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [selectedGroup, setSelectedGroup] = useState<Conversation | null>(null);
   const [selectedConversationId, setSelectedConversationId] = useState<
     string | null
   >(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [messageDraft, setMessageDraft] = useState("");
   const [chatError, setChatError] = useState("");
+  const [groupOpen, setGroupOpen] = useState(false);
+  const [groupTitle, setGroupTitle] = useState("");
+  const [groupMemberIds, setGroupMemberIds] = useState<string[]>([]);
+  const [groupError, setGroupError] = useState("");
+  const [groupManageOpen, setGroupManageOpen] = useState(false);
+  const [groupManageTitle, setGroupManageTitle] = useState("");
+  const [groupAction, setGroupAction] = useState<string | null>(null);
+  const [sidebarLoading, setSidebarLoading] = useState(true);
   const conversationIdRef = useRef<string | null>(null);
   const selectedUserId = selectedUser?.id;
 
   const handleStartCallRequest = async (type: "audio" | "video") => {
+    if (selectedGroup && selectedConversationId) {
+      setChatError("");
+      try {
+        const response = await api.createCall({
+          conversationId: selectedConversationId,
+          mode: type,
+        });
+        navigate(`/callroom/groups-call?callId=${response.call.id}`);
+      } catch (error) {
+        setChatError(
+          error instanceof Error
+            ? error.message
+            : "Unable to start the group call.",
+        );
+      }
+      return;
+    }
     if (
       !selectedUserId ||
       !selectedConversationId ||
@@ -97,6 +131,140 @@ const MessagesPanel = () => {
       setChatError(
         error instanceof Error ? error.message : "Unable to start the call.",
       );
+    }
+  };
+
+  const handleCreateGroup = async () => {
+    if (!groupTitle.trim() || groupMemberIds.length === 0) {
+      setGroupError("Add a group name and at least one member.");
+      return;
+    }
+    try {
+      const response = await api.createGroup(groupTitle.trim(), groupMemberIds);
+      setGroupConversations((groups) => [response.conversation, ...groups]);
+      setSelectedUser(null);
+      setSelectedGroup(response.conversation);
+      setGroupOpen(false);
+      setGroupTitle("");
+      setGroupMemberIds([]);
+      setGroupError("");
+    } catch (error) {
+      setGroupError(
+        error instanceof Error ? error.message : "Unable to create the group.",
+      );
+    }
+  };
+
+  const handleRenameGroup = async () => {
+    if (!selectedGroup || !groupManageTitle.trim()) return;
+    setGroupAction("rename");
+    try {
+      const response = await api.renameGroup(
+        selectedGroup.id,
+        groupManageTitle.trim(),
+      );
+      setSelectedGroup(response.conversation);
+      setGroupConversations((groups) =>
+        groups.map((group) =>
+          group.id === response.conversation.id ? response.conversation : group,
+        ),
+      );
+      setGroupManageTitle(response.conversation.title ?? "");
+    } catch (error) {
+      setChatError(
+        error instanceof Error ? error.message : "Unable to rename the group.",
+      );
+    } finally {
+      setGroupAction(null);
+    }
+  };
+
+  const handleRemoveGroupMember = async (memberId: string) => {
+    if (!selectedGroup) return;
+    setGroupAction(`remove:${memberId}`);
+    try {
+      await api.removeGroupMember(selectedGroup.id, memberId);
+      if (memberId === currentUser?.id) {
+        setGroupConversations((groups) =>
+          groups.filter((group) => group.id !== selectedGroup.id),
+        );
+        setSelectedGroup(null);
+        setSelectedConversationId(null);
+        setMessages([]);
+        setGroupManageOpen(false);
+        return;
+      }
+      setSelectedGroup((group) =>
+        group
+          ? {
+              ...group,
+              members: group.members.filter((member) => member.id !== memberId),
+            }
+          : group,
+      );
+      setGroupConversations((groups) =>
+        groups.map((group) =>
+          group.id === selectedGroup.id
+            ? {
+                ...group,
+                members: group.members.filter(
+                  (member) => member.id !== memberId,
+                ),
+              }
+            : group,
+        ),
+      );
+    } catch (error) {
+      setChatError(
+        error instanceof Error ? error.message : "Unable to remove the member.",
+      );
+    } finally {
+      setGroupAction(null);
+    }
+  };
+
+  const handleDeleteGroup = async () => {
+    if (!selectedGroup) return;
+    setGroupAction("delete");
+    try {
+      await api.deleteGroup(selectedGroup.id);
+      setGroupConversations((groups) =>
+        groups.filter((group) => group.id !== selectedGroup.id),
+      );
+      setSelectedGroup(null);
+      setSelectedConversationId(null);
+      setMessages([]);
+      setGroupManageOpen(false);
+    } catch (error) {
+      setChatError(
+        error instanceof Error ? error.message : "Unable to delete the group.",
+      );
+    } finally {
+      setGroupAction(null);
+    }
+  };
+
+  const handleAddGroupMember = async (memberId: string) => {
+    if (!selectedGroup) return;
+    setGroupAction(`add:${memberId}`);
+    try {
+      const response = await api.addGroupMember(selectedGroup.id, memberId);
+      setSelectedGroup((group) =>
+        group ? { ...group, members: response.members } : group,
+      );
+      setGroupConversations((groups) =>
+        groups.map((group) =>
+          group.id === selectedGroup.id
+            ? { ...group, members: response.members }
+            : group,
+        ),
+      );
+    } catch (error) {
+      setChatError(
+        error instanceof Error ? error.message : "Unable to add the member.",
+      );
+    } finally {
+      setGroupAction(null);
     }
   };
 
@@ -172,6 +340,7 @@ const MessagesPanel = () => {
     let isMounted = true;
 
     async function loadFollowing(userId: string) {
+      setSidebarLoading(true);
       try {
         const response = await fetch(
           `${API_BASE_URL}/users/${userId}/following`,
@@ -188,11 +357,20 @@ const MessagesPanel = () => {
         if (!isMounted) return;
 
         setFollowingUsers(people);
+        const conversations = await api.conversations();
+        if (!isMounted) return;
+        setGroupConversations(
+          conversations.conversations.filter(
+            (conversation) => conversation.kind === "group",
+          ),
+        );
         setSelectedUser(
           (previous: User | null) => previous ?? people[0] ?? null,
         );
       } catch (error) {
         console.error("Failed to load messages sidebar data:", error);
+      } finally {
+        if (isMounted) setSidebarLoading(false);
       }
     }
 
@@ -202,6 +380,39 @@ const MessagesPanel = () => {
       isMounted = false;
     };
   }, [currentUser?.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    conversationIdRef.current = null;
+    if (!selectedGroup) return;
+    const group = selectedGroup;
+
+    async function openGroupConversation() {
+      try {
+        const response = await fetch(
+          `${API_BASE_URL}/conversations/${group.id}/messages?limit=50&offset=0`,
+          { credentials: "include" },
+        );
+        if (!response.ok) throw new Error("Unable to load group messages.");
+        const history = (await response.json()) as { messages?: ChatMessage[] };
+        if (cancelled) return;
+        conversationIdRef.current = group.id;
+        setMessages(mergeMessages(history.messages ?? []));
+        setSelectedConversationId(group.id);
+      } catch (error) {
+        if (cancelled) return;
+        setChatError(
+          error instanceof Error ? error.message : "Unable to load this group.",
+        );
+      }
+    }
+
+    void openGroupConversation();
+    return () => {
+      cancelled = true;
+      conversationIdRef.current = null;
+    };
+  }, [selectedGroup]);
 
   useEffect(() => {
     let cancelled = false;
@@ -281,24 +492,25 @@ const MessagesPanel = () => {
       .join("") || "YO";
 
   const selectedContact = selectedUser;
+  const selectedDisplayName = selectedGroup?.title ?? selectedContact?.fullName;
   const callsDisabled = !selectedConversationId || !connected || busy;
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden">
+    <div className="mobile-messages flex flex-col h-screen overflow-hidden">
       <div className="h-14 shrink-0 flex items-center gap-3">
         <div className="w-16 bg-color6 h-full" />
         <p className="text-color1 font-extrabold text-xl">Messages</p>
       </div>
 
-      <div className="flex justify-between flex-1 overflow-hidden ">
+      <div className="mobile-messages-body flex justify-between flex-1 overflow-hidden ">
         {/* Leftmost Icon Sidebar */}
-        <div className="w-16 px-3 flex gap-4 flex-col items-center bg-color6 relative shrink-0">
+        <div className="mobile-messages-nav w-16 px-3 flex gap-4 flex-col items-center bg-color6 relative shrink-0">
           <PeopleGroupDuotoneIcon
             height="1em"
             className="text-3xl text-color4 cursor-pointer transition-transform duration-200 hover:scale-125 active:scale-90"
           />
           <OrganizationIcon
-            onClick={() => window.location.href = "/home"}
+            onClick={() => (window.location.href = "/home")}
             height="1em"
             className="text-3xl text-color4 cursor-pointer transition-transform duration-200 hover:scale-125 active:scale-90"
           />
@@ -346,9 +558,9 @@ const MessagesPanel = () => {
         </div>
 
         {/* Main Workspace */}
-        <div className="w-full grid grid-cols-12 overflow-hidden">
+        <div className="mobile-messages-workspace w-full grid grid-cols-12 overflow-hidden">
           {/* Middle Navigation Column */}
-          <div className="col-span-2 flex flex-col overflow-hidden ">
+          <div className="mobile-messages-list col-span-2 flex flex-col overflow-hidden ">
             {/* User Profile Card */}
             <div className="h-40 border border-[#ACA9FF] bg-[#f3f7ff] shrink-0 transition-all duration-300 hover:shadow-md">
               <div className="w-full flex flex-col relative pb-2 group cursor-pointer">
@@ -386,68 +598,127 @@ const MessagesPanel = () => {
                   {tab}
                 </button>
               ))}
+              <button
+                type="button"
+                onClick={() => setGroupOpen(true)}
+                className="ml-auto rounded-full p-1 text-[#1900FF] hover:bg-[#ACA9FF]/20"
+                aria-label="Create group"
+              >
+                <PlusIcon height="1em" />
+              </button>
             </div>
 
             {/* Conversation List */}
             <div className="flex-1 overflow-y-auto scrollbar-none [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden border border-[#ACA9FF] bg-[#f3f7ff] p-3 flex flex-col gap-3">
-              {followingUsers.length === 0 ? (
-                <div className="flex h-full items-center justify-center text-center text-[10px] text-gray-500">
-                  You are not following anyone yet.
-                </div>
-              ) : (
-                followingUsers.map((person) => {
-                  const isSelected = selectedContact?.id === person.id;
-                  const handleName = person.fullName || "Followed user";
-                  const handleTag = person.role
-                    ? person.role.toUpperCase()
-                    : "USER";
-
-                  return (
-                    <div
-                      key={person.id}
-                      onClick={() => {
-                        if (person.id === selectedUserId) return;
-                        conversationIdRef.current = null;
-                        setSelectedConversationId(null);
-                        setMessages([]);
-                        setChatError("");
-                        setMessageDraft("");
-                        setSelectedUser(person);
-                      }}
-                      className={`flex gap-2 items-center p-1 rounded-lg cursor-pointer transition-all duration-200 hover:bg-[#ACA9FF]/20 hover:translate-x-1 active:scale-[0.98] group ${
-                        isSelected
-                          ? "bg-[#ACA9FF]/20 ring-1 ring-[#1900FF]/30"
-                          : ""
-                      }`}
-                    >
-                      <Avatar className="h-9 w-9 shrink-0 transition-transform duration-200 group-hover:scale-105">
-                        <AvatarImage src="https://github.com/shadcn.png" />
-                        <AvatarFallback>
-                          {handleName
-                            .split(" ")
-                            .filter(Boolean)
-                            .slice(0, 2)
-                            .map((part: string) => part[0]?.toUpperCase() ?? "")
-                            .join("") || "U"}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="truncate">
-                        <p className="text-[10px] font-medium truncate transition-colors group-hover:text-[#1900FF]">
-                          {handleName}
-                        </p>
-                        <p className="text-[8px] text-gray-500 truncate">
-                          {handleTag}
-                        </p>
+              {sidebarLoading ? (
+                <div className="space-y-3">
+                  {[1, 2, 3, 4].map((item) => (
+                    <div key={item} className="flex items-center gap-2 p-1">
+                      <Skeleton className="h-9 w-9 rounded-full" />
+                      <div className="min-w-0 flex-1 space-y-2">
+                        <Skeleton className="h-2.5 w-24" />
+                        <Skeleton className="h-2 w-14" />
                       </div>
                     </div>
-                  );
-                })
+                  ))}
+                </div>
+              ) : groupConversations.length === 0 &&
+                followingUsers.length === 0 ? (
+                <div className="flex h-full items-center justify-center text-center text-[10px] text-gray-500">
+                  Create a group or follow someone to start chatting.
+                </div>
+              ) : (
+                <>
+                  {groupConversations.map((group) => (
+                    <button
+                      key={group.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedUser(null);
+                        setSelectedGroup(group);
+                        setMessages([]);
+                        setSelectedConversationId(null);
+                        setChatError("");
+                      }}
+                      className={`flex gap-2 items-center p-1 rounded-lg cursor-pointer text-left transition-all duration-200 hover:bg-[#ACA9FF]/20 hover:translate-x-1 group ${selectedGroup?.id === group.id ? "bg-[#ACA9FF]/20 ring-1 ring-[#1900FF]/30" : ""}`}
+                    >
+                      <Avatar className="h-9 w-9 shrink-0">
+                        <AvatarFallback>
+                          {(group.title || "Group")
+                            .split(" ")
+                            .slice(0, 2)
+                            .map((part) => part[0]?.toUpperCase() ?? "")
+                            .join("")}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0 truncate">
+                        <p className="text-[10px] font-medium truncate group-hover:text-[#1900FF]">
+                          {group.title || "Group conversation"}
+                        </p>
+                        <p className="text-[8px] text-gray-500 truncate">
+                          {group.members.length} members
+                        </p>
+                      </div>
+                    </button>
+                  ))}
+                  {followingUsers.map((person) => {
+                    const isSelected = selectedContact?.id === person.id;
+                    const handleName = person.fullName || "Followed user";
+                    const handleTag = person.role
+                      ? person.role.toUpperCase()
+                      : "USER";
+
+                    return (
+                      <div
+                        key={person.id}
+                        onClick={() => {
+                          if (person.id === selectedUserId) return;
+                          setSelectedGroup(null);
+                          conversationIdRef.current = null;
+                          setSelectedConversationId(null);
+                          setMessages([]);
+                          setChatError("");
+                          setMessageDraft("");
+                          setSelectedUser(person);
+                        }}
+                        className={`flex gap-2 items-center p-1 rounded-lg cursor-pointer transition-all duration-200 hover:bg-[#ACA9FF]/20 hover:translate-x-1 active:scale-[0.98] group ${
+                          isSelected
+                            ? "bg-[#ACA9FF]/20 ring-1 ring-[#1900FF]/30"
+                            : ""
+                        }`}
+                      >
+                        <Avatar className="h-9 w-9 shrink-0 transition-transform duration-200 group-hover:scale-105">
+                          <AvatarImage src="https://github.com/shadcn.png" />
+                          <AvatarFallback>
+                            {handleName
+                              .split(" ")
+                              .filter(Boolean)
+                              .slice(0, 2)
+                              .map(
+                                (part: string) => part[0]?.toUpperCase() ?? "",
+                              )
+                              .join("") || "U"}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="truncate">
+                          <p className="text-[10px] font-medium truncate transition-colors group-hover:text-[#1900FF]">
+                            {handleName}
+                          </p>
+                          <p className="text-[8px] text-gray-500 truncate">
+                            {handleTag}
+                          </p>
+                        </div>
+                        <MobileBottomNav />
+                      </div>
+                    );
+                  })}
+                </>
               )}
             </div>
           </div>
 
           {/* Right Chat Column */}
-          <div className="col-span-10 flex flex-col overflow-hidden">
+          <div className="mobile-messages-chat col-span-10 flex flex-col overflow-hidden">
             {/* Header */}
             <div className="h-12 bg-color6 border border-[#ACA9FF] flex justify-between items-center px-5 shrink-0">
               <div className="flex items-center gap-2 cursor-pointer group">
@@ -457,15 +728,14 @@ const MessagesPanel = () => {
                 </Avatar>
                 <div>
                   <p className="text-[10px] font-extrabold transition-colors text-white group-hover:text-[#eeeeefa1]">
-                    {selectedContact?.fullName ??
+                    {selectedDisplayName ??
                       currentUser?.fullName ??
                       "Select a contact"}
                   </p>
                   <p className="text-[8px] text-gray-500">
-                    @
-                    {selectedContact?.email?.split("@")[0] ??
-                      currentUser?.email?.split("@")[0] ??
-                      "user"}
+                    {selectedGroup
+                      ? `${selectedGroup.members.length} members`
+                      : `@${selectedContact?.email?.split("@")[0] ?? currentUser?.email?.split("@")[0] ?? "user"}`}
                   </p>
                 </div>
               </div>
@@ -488,9 +758,18 @@ const MessagesPanel = () => {
                 >
                   <VideoOutlineIcon height="22px" color="white" />
                 </button>
-                <div className="p-1.5 rounded-full cursor-pointer transition-all duration-200 hover:bg-black/5 dark:hover:bg-white/5 hover:scale-110 active:scale-90">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!selectedGroup) return;
+                    setGroupManageTitle(selectedGroup.title ?? "");
+                    setGroupManageOpen(true);
+                  }}
+                  disabled={!selectedGroup}
+                  className="p-1.5 rounded-full cursor-pointer transition-all duration-200 hover:bg-black/5 dark:hover:bg-white/5 hover:scale-110 active:scale-90 disabled:opacity-40"
+                >
                   <MenuDots16Icon height="22px" color="white" />
-                </div>
+                </button>
               </div>
             </div>
 
@@ -538,7 +817,9 @@ const MessagesPanel = () => {
                               : "bg-[#EAEAEA] text-[#656565] hover:bg-[#e0e0e0] hover:shadow-sm"
                           }`}
                         >
-                          <p className="text-xs wrap-break-word">{message.body}</p>
+                          <p className="text-xs wrap-break-word">
+                            {message.body}
+                          </p>
                         </div>
 
                         {isOutgoing && (
@@ -601,6 +882,216 @@ const MessagesPanel = () => {
           </div>
         </div>
       </div>
+
+      {groupOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0A0332]/50 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-bold text-[#0A0332]">
+                  Create a group
+                </h2>
+                <p className="text-xs text-slate-500">
+                  Choose people you want in this conversation.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setGroupOpen(false)}
+                className="rounded-lg px-2 py-1 text-sm font-bold text-slate-500 hover:bg-slate-100"
+              >
+                Close
+              </button>
+            </div>
+            <input
+              value={groupTitle}
+              onChange={(event) => setGroupTitle(event.target.value)}
+              placeholder="Group name"
+              maxLength={120}
+              className="mt-4 w-full rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-[#1900FF]"
+            />
+            <div className="mt-4 max-h-52 space-y-2 overflow-y-auto">
+              {followingUsers.length ? (
+                followingUsers.map((person) => (
+                  <label
+                    key={person.id}
+                    className="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-200 p-3 hover:bg-[#F3F2FF]"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={groupMemberIds.includes(person.id)}
+                      onChange={(event) =>
+                        setGroupMemberIds((current) =>
+                          event.target.checked
+                            ? [...current, person.id]
+                            : current.filter((id) => id !== person.id),
+                        )
+                      }
+                    />
+                    <span className="text-sm font-bold text-[#0A0332]">
+                      {person.fullName}
+                    </span>
+                  </label>
+                ))
+              ) : (
+                <p className="text-sm text-slate-600">
+                  Follow people first so you can add them to a group.
+                </p>
+              )}
+            </div>
+            {groupError && (
+              <p className="mt-3 text-sm text-red-600">{groupError}</p>
+            )}
+            <button
+              type="button"
+              onClick={() => void handleCreateGroup()}
+              className="mt-4 w-full rounded-xl bg-[#1900FF] px-4 py-3 text-sm font-bold text-white hover:bg-[#1300c4]"
+            >
+              Create group
+            </button>
+          </div>
+        </div>
+      )}
+
+      {groupManageOpen && selectedGroup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0A0332]/50 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-lg font-bold text-[#0A0332]">Manage group</h2>
+              <button
+                type="button"
+                onClick={() => setGroupManageOpen(false)}
+                className="rounded-lg px-2 py-1 text-sm font-bold text-slate-500 hover:bg-slate-100"
+              >
+                Close
+              </button>
+            </div>
+            {selectedGroup.createdBy === currentUser?.id ? (
+              <>
+                <div className="mt-4 flex gap-2">
+                  <input
+                    value={groupManageTitle}
+                    onChange={(event) =>
+                      setGroupManageTitle(event.target.value)
+                    }
+                    className="min-w-0 flex-1 rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-[#1900FF]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void handleRenameGroup()}
+                    disabled={groupAction !== null}
+                    className="flex items-center gap-2 rounded-xl bg-[#1900FF] px-3 text-sm font-bold text-white hover:bg-[#1300c4] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {groupAction === "rename" && (
+                      <LoaderCircle size={14} className="animate-spin" />
+                    )}
+                    {groupAction === "rename" ? "Saving..." : "Save"}
+                  </button>
+                </div>
+                <p className="mt-4 text-xs font-bold uppercase text-slate-500">
+                  Members
+                </p>
+                <div className="mt-2 space-y-2">
+                  {selectedGroup.members.map((member) => (
+                    <div
+                      key={member.id}
+                      className="flex items-center justify-between rounded-xl border border-slate-200 p-3"
+                    >
+                      <span className="text-sm font-bold text-[#0A0332]">
+                        {member.fullName}
+                      </span>
+                      {member.id !== selectedGroup.createdBy && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void handleRemoveGroupMember(member.id)
+                          }
+                          disabled={groupAction !== null}
+                          className="flex items-center gap-1 text-xs font-bold text-red-600 hover:underline disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {groupAction === `remove:${member.id}` && (
+                            <LoaderCircle size={12} className="animate-spin" />
+                          )}
+                          {groupAction === `remove:${member.id}`
+                            ? "Removing..."
+                            : "Remove"}
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-4 text-xs font-bold uppercase text-slate-500">
+                  Add members
+                </p>
+                <div className="mt-2 space-y-2">
+                  {followingUsers
+                    .filter(
+                      (person) =>
+                        !selectedGroup.members.some(
+                          (member) => member.id === person.id,
+                        ),
+                    )
+                    .map((person) => (
+                      <div
+                        key={person.id}
+                        className="flex items-center justify-between rounded-xl border border-slate-200 p-3"
+                      >
+                        <span className="text-sm text-[#0A0332]">
+                          {person.fullName}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => void handleAddGroupMember(person.id)}
+                          disabled={groupAction !== null}
+                          className="flex items-center gap-1 text-xs font-bold text-[#1900FF] hover:underline disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {groupAction === `add:${person.id}` && (
+                            <LoaderCircle size={12} className="animate-spin" />
+                          )}
+                          {groupAction === `add:${person.id}`
+                            ? "Adding..."
+                            : "Add"}
+                        </button>
+                      </div>
+                    ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void handleDeleteGroup()}
+                  disabled={groupAction !== null}
+                  className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl border border-red-200 px-4 py-3 text-sm font-bold text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {groupAction === "delete" && (
+                    <LoaderCircle size={16} className="animate-spin" />
+                  )}
+                  {groupAction === "delete" ? "Deleting..." : "Delete group"}
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="mt-4 text-sm text-slate-600">
+                  Only the group owner can manage members and group settings.
+                </p>
+                <button
+                  type="button"
+                  onClick={() =>
+                    currentUser && void handleRemoveGroupMember(currentUser.id)
+                  }
+                  disabled={groupAction !== null}
+                  className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl border border-red-200 px-4 py-3 text-sm font-bold text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {groupAction === `remove:${currentUser?.id}` && (
+                    <LoaderCircle size={16} className="animate-spin" />
+                  )}
+                  {groupAction === `remove:${currentUser?.id}`
+                    ? "Leaving..."
+                    : "Leave group"}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -610,5 +1101,4 @@ const Messages = () => {
   return <MessagesPanel key={user?.id ?? "signed-out"} />;
 };
 
-export default Messages;    
- 
+export default Messages;
