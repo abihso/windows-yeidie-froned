@@ -340,11 +340,12 @@ const Dashboard = () => {
   const pendingRequests = bookings.filter(
     (booking) => booking.status === "pending",
   );
+  const now = Date.now();
   const upcomingAppointments = bookings
     .filter(
       (booking) =>
         (booking.status === "confirmed" || booking.status === "pending") &&
-        new Date(booking.startsAt).getTime() > Date.now(),
+        new Date(booking.endsAt).getTime() > now,
     )
     .sort(
       (first, second) =>
@@ -375,6 +376,12 @@ const Dashboard = () => {
     if (hours < 24) return `${hours}h`;
     const days = Math.floor(hours / 24);
     return `${days}d`;
+  }
+
+  function appointmentLabel(booking: Booking) {
+    if (booking.status === "pending") return "Awaiting confirmation";
+    const startsAt = new Date(booking.startsAt).getTime();
+    return startsAt <= now ? "Ongoing · Join now" : "Upcoming";
   }
 
   async function joinAppointment(booking: Booking) {
@@ -1156,9 +1163,7 @@ const Dashboard = () => {
                         dateStyle: "medium",
                         timeStyle: "short",
                       })}
-                      {booking.status === "pending"
-                        ? " · Awaiting confirmation"
-                        : ""}
+                      {` · ${appointmentLabel(booking)}`}
                     </p>
                   </div>
                   <ChevronRight className="text-black shrink-0" />
