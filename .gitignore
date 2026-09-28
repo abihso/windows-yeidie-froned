@@ -10,9 +10,8 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
-yeidie-backend
 *.local
-
+windows-yeidie-backend
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

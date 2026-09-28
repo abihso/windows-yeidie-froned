@@ -389,11 +389,15 @@ export function CallProvider({ children }: { children: ReactNode }) {
         nextSocket.on("call:request", showIncoming);
         nextSocket.on(
           "call:invited",
-          (payload: { callId?: string; call?: { id?: string } }) => {
+          (payload: {
+            callId?: string;
+            call?: { id?: string; bookingId?: string | null };
+          }) => {
             const callId = payload.callId ?? payload.call?.id;
             if (!callId || disposed) return;
+            const room = payload.call?.bookingId ? "session" : "groups-call";
             navigateRef.current(
-              `/callroom/groups-call?callId=${encodeURIComponent(callId)}`,
+              `/callroom/${room}?callId=${encodeURIComponent(callId)}`,
             );
           },
         );
