@@ -14,12 +14,18 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import VideoOutlineIcon from "@iconify-react/basil/video-outline";
 import CallOutlineIcon from "@iconify-react/famicons/call-outline";
-import { LoaderCircle } from "lucide-react";
+import {
+  Download,
+  LoaderCircle,
+  Mic,
+  Paperclip,
+  Send,
+  Smile,
+  Square,
+  X,
+} from "lucide-react";
 import MenuDots16Icon from "@iconify-react/qlementine-icons/menu-dots-16";
 import PlusIcon from "@iconify-react/akar-icons/plus";
-import StickerEmojiIcon from "@iconify-react/mdi/sticker-emoji";
-import Emoji2LineIcon from "@iconify-react/mingcute/emoji-2-line";
-import MicIcon from "@iconify-react/codicon/mic";
 import { useRef, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, type Conversation, type User } from "../../../lib/api";
@@ -36,7 +42,14 @@ type ChatMessage = {
   senderId: string;
   body: string;
   createdAt: string;
+  attachmentName?: string | null;
+  attachmentUrl?: string | null;
+  attachmentMime?: string | null;
+  attachmentSize?: number | null;
+  reactions?: { emoji: string; userId: string }[];
 };
+
+const REACTION_EMOJIS = ["❤️", "😂", "👍", "😮", "😢", "👏"];
 
 const fetchWithCsrf = async (
   url: string,
@@ -82,6 +95,13 @@ const MessagesPanel = () => {
   >(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [messageDraft, setMessageDraft] = useState("");
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [sendingFile, setSendingFile] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [reactionMessageId, setReactionMessageId] = useState<string | null>(
+    null,
+  );
+  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const [chatError, setChatError] = useState("");
   const [groupOpen, setGroupOpen] = useState(false);
   const [groupTitle, setGroupTitle] = useState("");
@@ -92,6 +112,11 @@ const MessagesPanel = () => {
   const [groupAction, setGroupAction] = useState<string | null>(null);
   const [sidebarLoading, setSidebarLoading] = useState(true);
   const conversationIdRef = useRef<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const recordingStreamRef = useRef<MediaStream | null>(null);
+  const recordingChunksRef = useRef<Blob[]>([]);
+  const recordingConversationRef = useRef<string | null>(null);
   const selectedUserId = selectedUser?.id;
 
   const handleStartCallRequest = async (type: "audio" | "video") => {
@@ -268,72 +293,214 @@ const MessagesPanel = () => {
     }
   };
 
-  const handleSendMessage = async () => {
+  const handleSendMessage = async (
+    file?: File,
+    expectedConversationId?: string,
+  ) => {
+    const conversationId = expectedConversationId ?? selectedConversationId;
+    const payload = messageDraft.trim();
     if (
-      !selectedConversationId ||
-      selectedConversationId !== conversationIdRef.current ||
-      !messageDraft.trim()
+      !conversationId ||
+      conversationId !== conversationIdRef.current ||
+      (!payload && !file)
     ) {
       return;
     }
 
-    const conversationId = selectedConversationId;
-    const payload = messageDraft.trim();
-    const optimisticMessage = {
-      id: `temp-${crypto.randomUUID()}`,
-      conversationId,
-      senderId: currentUser?.id ?? "me",
-      body: payload,
-      createdAt: new Date().toISOString(),
-    };
-
-    setMessages((previous) => [...previous, optimisticMessage]);
-    setMessageDraft("");
+    const optimisticMessage: ChatMessage | null = file
+      ? null
+      : {
+          id: `temp-${crypto.randomUUID()}`,
+          conversationId,
+          senderId: currentUser?.id ?? "me",
+          body: payload,
+          createdAt: new Date().toISOString(),
+        };
+    if (optimisticMessage) {
+      setMessages((previous) => [...previous, optimisticMessage]);
+      setMessageDraft("");
+    }
+    if (file) setSendingFile(true);
 
     try {
+      const formData = file ? new FormData() : null;
+      if (formData && file) {
+        if (payload) formData.append("body", payload);
+        formData.append("file", file, file.name);
+      }
       const response = await fetchWithCsrf(
-        `${API_BASE_URL}/conversations/${conversationId}/messages`,
+        `${API_BASE_URL}/conversations/${conversationId}/messages${file ? "/attachment" : ""}`,
         {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ body: payload }),
+          ...(formData
+            ? { body: formData }
+            : {
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ body: payload }),
+              }),
         },
       );
 
       const result = (await response.json().catch(() => null)) as {
-        message?: { id?: string; body?: string; createdAt?: string };
+        message?: ChatMessage;
+        error?: { message?: string };
       } | null;
-
       if (!response.ok || !result?.message) {
-        throw new Error("Message not sent.");
+        throw new Error(result?.error?.message ?? "Message not sent.");
       }
-
       if (conversationIdRef.current !== conversationId) return;
-      const savedMessage: ChatMessage = {
-        ...optimisticMessage,
-        id: result.message.id ?? optimisticMessage.id,
-        body: result.message.body ?? optimisticMessage.body,
-        createdAt: result.message.createdAt ?? optimisticMessage.createdAt,
-      };
       setMessages((previous) =>
         mergeMessages([
-          ...previous.filter((item) => item.id !== optimisticMessage.id),
-          savedMessage,
+          ...previous.filter((item) => item.id !== optimisticMessage?.id),
+          result.message!,
         ]),
       );
+      if (file) {
+        setPendingFile((selected) => (selected === file ? null : selected));
+        setMessageDraft("");
+      }
     } catch (error) {
       console.error("Failed to send message:", error);
       if (conversationIdRef.current !== conversationId) return;
       setChatError(
         error instanceof Error ? error.message : "Message could not be sent.",
       );
+      if (optimisticMessage) {
+        setMessages((previous) =>
+          previous.filter((item) => item.id !== optimisticMessage.id),
+        );
+      }
+    } finally {
+      if (file) setSendingFile(false);
+    }
+  };
+
+  const handleReaction = async (message: ChatMessage, emoji: string) => {
+    if (!selectedConversationId || !currentUser?.id) return;
+    const conversationId = selectedConversationId;
+    try {
+      const response = await fetchWithCsrf(
+        `${API_BASE_URL}/conversations/${conversationId}/messages/${message.id}/reactions`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ emoji }),
+        },
+      );
+      const result = (await response.json().catch(() => null)) as {
+        active?: boolean;
+        error?: { message?: string };
+      } | null;
+      if (!response.ok || typeof result?.active !== "boolean") {
+        throw new Error(
+          result?.error?.message ?? "Reaction could not be saved.",
+        );
+      }
       setMessages((previous) =>
-        previous.filter((item) => item.id !== optimisticMessage.id),
+        previous.map((item) => {
+          if (item.id !== message.id) return item;
+          const reactions = (item.reactions ?? []).filter(
+            (reaction) =>
+              reaction.userId !== currentUser.id || reaction.emoji !== emoji,
+          );
+          if (result.active) reactions.push({ emoji, userId: currentUser.id });
+          return { ...item, reactions };
+        }),
+      );
+      setReactionMessageId(null);
+    } catch (error) {
+      setChatError(
+        error instanceof Error ? error.message : "Reaction could not be saved.",
       );
     }
   };
+
+  const toggleRecording = async () => {
+    if (recording) {
+      recorderRef.current?.stop();
+      return;
+    }
+    const conversationId = selectedConversationId;
+    if (!conversationId || conversationId !== conversationIdRef.current) return;
+    if (
+      !navigator.mediaDevices?.getUserMedia ||
+      typeof MediaRecorder === "undefined"
+    ) {
+      setChatError("Voice recording is not supported in this browser.");
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (conversationIdRef.current !== conversationId) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+      recordingStreamRef.current = stream;
+      const mimeType = ["audio/webm;codecs=opus", "audio/mp4"].find((type) =>
+        MediaRecorder.isTypeSupported(type),
+      );
+      const recorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
+      recordingConversationRef.current = conversationId;
+      recordingChunksRef.current = [];
+      recorderRef.current = recorder;
+      recorder.ondataavailable = (event) => {
+        if (event.data.size) recordingChunksRef.current.push(event.data);
+      };
+      recorder.onstop = () => {
+        const audio = new Blob(recordingChunksRef.current, {
+          type: recorder.mimeType || "audio/webm",
+        });
+        recordingChunksRef.current = [];
+        stream.getTracks().forEach((track) => track.stop());
+        recordingStreamRef.current = null;
+        recorderRef.current = null;
+        recordingConversationRef.current = null;
+        setRecording(false);
+        if (!audio.size || conversationIdRef.current !== conversationId) return;
+        const extension = audio.type.includes("mp4") ? "m4a" : "webm";
+        const voiceMessage = new File([audio], `voice-message.${extension}`, {
+          type: audio.type,
+        });
+        setPendingFile(voiceMessage);
+        void handleSendMessage(voiceMessage, conversationId);
+      };
+      recorder.start();
+      setChatError("");
+      setRecording(true);
+    } catch (error) {
+      recordingStreamRef.current?.getTracks().forEach((track) => track.stop());
+      recordingStreamRef.current = null;
+      setChatError(
+        error instanceof Error
+          ? error.message
+          : "Microphone access is required to record a voice message.",
+      );
+    }
+  };
+
+  useEffect(() => {
+    if (
+      recorderRef.current &&
+      recordingConversationRef.current !== selectedConversationId
+    ) {
+      recorderRef.current.stop();
+    }
+  }, [selectedConversationId]);
+
+  useEffect(
+    () => () => {
+      const recorder = recorderRef.current;
+      if (recorder) {
+        recorder.onstop = null;
+        recorder.ondataavailable = null;
+        recorder.stop();
+      }
+      recordingStreamRef.current?.getTracks().forEach((track) => track.stop());
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!currentUser?.id) return;
@@ -477,9 +644,34 @@ const MessagesPanel = () => {
       if (message.conversationId !== conversationIdRef.current) return;
       setMessages((previous) => mergeMessages([...previous, message]));
     };
+    const receiveReaction = (event: {
+      conversationId: string;
+      messageId: string;
+      userId: string;
+      emoji: string;
+      active: boolean;
+    }) => {
+      if (event.conversationId !== conversationIdRef.current) return;
+      setMessages((previous) =>
+        previous.map((message) => {
+          if (message.id !== event.messageId) return message;
+          const reactions = (message.reactions ?? []).filter(
+            (reaction) =>
+              reaction.userId !== event.userId ||
+              reaction.emoji !== event.emoji,
+          );
+          if (event.active) {
+            reactions.push({ emoji: event.emoji, userId: event.userId });
+          }
+          return { ...message, reactions };
+        }),
+      );
+    };
     socket.on("message:new", receiveMessage);
+    socket.on("message:reaction", receiveReaction);
     return () => {
       socket.off("message:new", receiveMessage);
+      socket.off("message:reaction", receiveReaction);
     };
   }, [socket]);
 
@@ -636,8 +828,13 @@ const MessagesPanel = () => {
                       onClick={() => {
                         setSelectedUser(null);
                         setSelectedGroup(group);
+                        conversationIdRef.current = null;
                         setMessages([]);
                         setSelectedConversationId(null);
+                        setMessageDraft("");
+                        setPendingFile(null);
+                        setReactionMessageId(null);
+                        setEmojiPickerOpen(false);
                         setChatError("");
                       }}
                       className={`flex gap-2 items-center p-1 rounded-lg cursor-pointer text-left transition-all duration-200 hover:bg-[#ACA9FF]/20 hover:translate-x-1 group ${selectedGroup?.id === group.id ? "bg-[#ACA9FF]/20 ring-1 ring-[#1900FF]/30" : ""}`}
@@ -679,6 +876,9 @@ const MessagesPanel = () => {
                           setMessages([]);
                           setChatError("");
                           setMessageDraft("");
+                          setPendingFile(null);
+                          setReactionMessageId(null);
+                          setEmojiPickerOpen(false);
                           setSelectedUser(person);
                         }}
                         className={`flex gap-2 items-center p-1 rounded-lg cursor-pointer transition-all duration-200 hover:bg-[#ACA9FF]/20 hover:translate-x-1 active:scale-[0.98] group ${
@@ -785,6 +985,17 @@ const MessagesPanel = () => {
                 ) : (
                   messages.map((message) => {
                     const isOutgoing = message.senderId === currentUser?.id;
+                    const attachmentEndpoint = message.attachmentUrl
+                      ? `${API_BASE_URL}/conversations/${encodeURIComponent(message.conversationId)}/messages/${encodeURIComponent(message.id)}/attachment`
+                      : "";
+                    const groupedReactions = Object.entries(
+                      (message.reactions ?? []).reduce<
+                        Record<string, string[]>
+                      >((groups, reaction) => {
+                        (groups[reaction.emoji] ??= []).push(reaction.userId);
+                        return groups;
+                      }, {}),
+                    );
 
                     return (
                       <div
@@ -810,16 +1021,112 @@ const MessagesPanel = () => {
                           </Avatar>
                         )}
 
-                        <div
-                          className={`max-w-[75%] py-3 px-6 flex items-center rounded-3xl transition-all duration-200 ${
-                            isOutgoing
-                              ? "bg-color6 text-white hover:bg-[#ACA9FF]/40 hover:shadow-sm"
-                              : "bg-[#EAEAEA] text-[#656565] hover:bg-[#e0e0e0] hover:shadow-sm"
-                          }`}
-                        >
-                          <p className="text-xs wrap-break-word">
-                            {message.body}
-                          </p>
+                        <div className="relative flex max-w-[75%] flex-col">
+                          {reactionMessageId === message.id && (
+                            <div className="absolute bottom-full right-0 z-20 mb-2 flex gap-1 rounded-xl border border-slate-200 bg-white p-2 shadow-lg">
+                              {REACTION_EMOJIS.map((emoji) => (
+                                <button
+                                  key={emoji}
+                                  type="button"
+                                  onClick={() =>
+                                    void handleReaction(message, emoji)
+                                  }
+                                  aria-label={`React with ${emoji}`}
+                                  className="rounded-md p-1.5 text-lg hover:bg-slate-100"
+                                >
+                                  {emoji}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                          <div
+                            className={`min-w-28 rounded-3xl px-4 py-3 transition-colors ${
+                              isOutgoing
+                                ? "bg-color6 text-white hover:bg-[#ACA9FF]/40"
+                                : "bg-[#EAEAEA] text-[#656565] hover:bg-[#e0e0e0]"
+                            }`}
+                          >
+                            {message.body && (
+                              <p className="whitespace-pre-wrap wrap-break-word text-xs">
+                                {message.body}
+                              </p>
+                            )}
+                            {message.attachmentUrl && (
+                              <div className={message.body ? "mt-2" : ""}>
+                                {message.attachmentMime?.startsWith(
+                                  "image/",
+                                ) && (
+                                  <img
+                                    src={`${attachmentEndpoint}?inline=true`}
+                                    crossOrigin="use-credentials"
+                                    alt={
+                                      message.attachmentName ?? "Shared image"
+                                    }
+                                    className="mb-2 max-h-56 max-w-full rounded-lg object-contain"
+                                  />
+                                )}
+                                {message.attachmentMime?.startsWith(
+                                  "audio/",
+                                ) && (
+                                  <audio
+                                    controls
+                                    crossOrigin="use-credentials"
+                                    src={`${attachmentEndpoint}?inline=true`}
+                                    className="max-w-full"
+                                  />
+                                )}
+                                <div className="flex items-center gap-2 text-xs">
+                                  <span className="max-w-48 truncate">
+                                    {message.attachmentName ?? "Shared file"}
+                                    {message.attachmentSize
+                                      ? ` · ${Math.max(1, Math.round(message.attachmentSize / 1024))} KB`
+                                      : ""}
+                                  </span>
+                                  <a
+                                    href={attachmentEndpoint}
+                                    aria-label={`Download ${message.attachmentName ?? "file"}`}
+                                    title="Download file"
+                                    className="shrink-0 rounded p-1 hover:bg-black/10"
+                                  >
+                                    <Download size={15} />
+                                  </a>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                          <div
+                            className={`mt-1 flex items-center gap-1 ${isOutgoing ? "justify-end" : "justify-start"}`}
+                          >
+                            {groupedReactions.map(([emoji, users]) => (
+                              <button
+                                key={emoji}
+                                type="button"
+                                onClick={() =>
+                                  void handleReaction(message, emoji)
+                                }
+                                aria-label={`${emoji} reaction, ${users.length} total`}
+                                aria-pressed={Boolean(
+                                  currentUser && users.includes(currentUser.id),
+                                )}
+                                className={`rounded-full border px-2 py-0.5 text-xs ${users.includes(currentUser?.id ?? "") ? "border-[#1900FF] bg-[#1900FF]/10" : "border-slate-200 bg-white"}`}
+                              >
+                                {emoji} {users.length}
+                              </button>
+                            ))}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setReactionMessageId((id) =>
+                                  id === message.id ? null : message.id,
+                                )
+                              }
+                              aria-label="React to message"
+                              title="React to message"
+                              className="rounded-full p-1 text-slate-500 hover:bg-slate-100"
+                            >
+                              <Smile size={15} />
+                            </button>
+                          </div>
                         </div>
 
                         {isOutgoing && (
@@ -838,13 +1145,71 @@ const MessagesPanel = () => {
               </div>
 
               {/* Chat Input Bar */}
-              <div className="h-11 border border-[#ACA9FF] rounded-xl flex items-center justify-between px-3 mt-2 shrink-0 transition-all duration-200 focus-within:ring-2 focus-within:ring-[#1900FF]/40 focus-within:shadow-md">
-                <div className="flex gap-3 items-center flex-1 h-full">
-                  <div className="p-1 rounded-full cursor-pointer transition-transform duration-200 hover:scale-125 hover:rotate-90 active:scale-90">
-                    <PlusIcon height="1.1em" />
-                  </div>
-                  <div className="p-1 rounded-full cursor-pointer transition-transform duration-200 hover:scale-125 active:scale-90">
-                    <StickerEmojiIcon height="1.1em" />
+              {pendingFile && (
+                <div className="mt-2 flex items-center gap-2 text-xs text-slate-600">
+                  <Paperclip size={14} />
+                  <span className="max-w-64 truncate">{pendingFile.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => setPendingFile(null)}
+                    aria-label="Remove selected file"
+                    className="rounded p-1 hover:bg-slate-100"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              )}
+              <div className="relative mt-2 flex min-h-11 shrink-0 items-center justify-between gap-2 rounded-xl border border-[#ACA9FF] px-3 transition-all duration-200 focus-within:ring-2 focus-within:ring-[#1900FF]/40 focus-within:shadow-md">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  className="hidden"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) setPendingFile(file);
+                    event.target.value = "";
+                  }}
+                />
+                <div className="flex h-10 min-w-0 flex-1 items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={!selectedConversationId || sendingFile}
+                    aria-label="Attach a file"
+                    title="Attach a file"
+                    className="rounded-full p-1.5 hover:bg-slate-100 disabled:opacity-40"
+                  >
+                    <Paperclip size={18} />
+                  </button>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setEmojiPickerOpen((open) => !open)}
+                      disabled={!selectedConversationId}
+                      aria-label="Choose an emoji"
+                      title="Choose an emoji"
+                      className="rounded-full p-1.5 hover:bg-slate-100 disabled:opacity-40"
+                    >
+                      <Smile size={18} />
+                    </button>
+                    {emojiPickerOpen && (
+                      <div className="absolute bottom-full left-0 z-20 mb-2 flex gap-1 rounded-xl border border-slate-200 bg-white p-2 shadow-lg">
+                        {REACTION_EMOJIS.map((emoji) => (
+                          <button
+                            key={emoji}
+                            type="button"
+                            onClick={() => {
+                              setMessageDraft((draft) => `${draft}${emoji}`);
+                              setEmojiPickerOpen(false);
+                            }}
+                            aria-label={`Insert ${emoji}`}
+                            className="rounded-md p-1.5 text-lg hover:bg-slate-100"
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <input
                     type="text"
@@ -857,24 +1222,52 @@ const MessagesPanel = () => {
                     }}
                     placeholder={
                       selectedConversationId
-                        ? "Type a message..."
+                        ? "Write a message..."
                         : "Select a person to chat"
                     }
                     disabled={!selectedConversationId}
-                    className="text-xs h-full w-full py-2 bg-transparent outline-none text-gray-700 disabled:cursor-not-allowed disabled:text-gray-400"
+                    className="h-full w-full min-w-0 bg-transparent py-2 text-xs text-gray-700 outline-none disabled:cursor-not-allowed disabled:text-gray-400"
                   />
                 </div>
-                <div className="flex gap-3 items-center">
-                  <div className="p-1 rounded-full cursor-pointer transition-transform duration-200 hover:scale-125 hover:rotate-12 active:scale-90">
-                    <Emoji2LineIcon height="1.1em" />
-                  </div>
+                <div className="flex shrink-0 items-center gap-1">
                   <button
                     type="button"
-                    onClick={() => void handleSendMessage()}
-                    disabled={!selectedConversationId || !messageDraft.trim()}
-                    className="p-1 rounded-full cursor-pointer transition-transform duration-200 hover:scale-125 active:scale-90 disabled:opacity-40 disabled:cursor-not-allowed"
+                    onClick={() => void toggleRecording()}
+                    disabled={!selectedConversationId || sendingFile}
+                    aria-label={
+                      recording
+                        ? "Stop and send voice message"
+                        : "Record voice message"
+                    }
+                    aria-pressed={recording}
+                    title={
+                      recording
+                        ? "Stop and send voice message"
+                        : "Record voice message"
+                    }
+                    className={`rounded-full p-2 hover:bg-slate-100 disabled:opacity-40 ${recording ? "text-red-600" : "text-slate-700"}`}
                   >
-                    <MicIcon height="1.1em" />
+                    {recording ? <Square size={17} /> : <Mic size={18} />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void handleSendMessage(pendingFile ?? undefined)
+                    }
+                    disabled={
+                      !selectedConversationId ||
+                      (!messageDraft.trim() && !pendingFile) ||
+                      sendingFile
+                    }
+                    aria-label={sendingFile ? "Sending file" : "Send message"}
+                    title={sendingFile ? "Sending" : "Send"}
+                    className="rounded-full bg-[#1900FF] p-2 text-white hover:bg-[#1200c4] disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {sendingFile ? (
+                      <LoaderCircle size={17} className="animate-spin" />
+                    ) : (
+                      <Send size={17} />
+                    )}
                   </button>
                 </div>
               </div>
