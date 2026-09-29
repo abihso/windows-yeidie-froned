@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Icon } from "@iconify/react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
@@ -16,7 +16,7 @@ import StickerEmojiIcon from "@iconify-react/mdi/sticker-emoji";
 import Emoji2LineIcon from "@iconify-react/mingcute/emoji-2-line";
 import MicIcon from "@iconify-react/codicon/mic";
 import { useCalls } from "../../../features/calls/call-context";
-import { api } from "../../../lib/api";
+import { api, normalizeMediaUrl } from "../../../lib/api";
 import { createCallClient } from "../../../lib/webrtc-client";
 import type { CallClient } from "../../../lib/webrtc-client";
 
@@ -36,6 +36,12 @@ type ChatMessage = {
 };
 
 type RemoteMedia = { socketId: string; stream: MediaStream };
+type CallPeer = {
+  socketId: string;
+  userId?: string;
+  fullName?: string;
+  avatarUrl?: string | null;
+};
 
 async function fetchWithCsrf(url: string, options: RequestInit = {}) {
   const csrfResponse = await fetch(`${API_BASE_URL}/auth/csrf`, {
@@ -118,6 +124,7 @@ function GroupsCalls() {
   );
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStreams, setRemoteStreams] = useState<RemoteMedia[]>([]);
+  const [callPeers, setCallPeers] = useState<Record<string, CallPeer>>({});
   const [muted, setMuted] = useState(false);
   const [cameraOff, setCameraOff] = useState(false);
   const [recording, setRecording] = useState(false);
@@ -188,10 +195,23 @@ function GroupsCalls() {
             ]);
             setStatus("You are connected");
           },
+          onPeerJoined: (peer) => {
+            if (!cancelled) {
+              setCallPeers((previous) => ({
+                ...previous,
+                [peer.socketId]: peer,
+              }));
+            }
+          },
           onPeerLeft: ({ socketId }) => {
             setRemoteStreams((previous) =>
               previous.filter((item) => item.socketId !== socketId),
             );
+            setCallPeers((previous) => {
+              const next = { ...previous };
+              delete next[socketId];
+              return next;
+            });
           },
           onError: (failure) => {
             if (!cancelled) setError(failure.message);
@@ -206,6 +226,11 @@ function GroupsCalls() {
         clientRef.current = client;
         const joined = await client.join(room.id);
         if (!cancelled) {
+          setCallPeers(
+            Object.fromEntries(
+              joined.peers.map((peer) => [peer.socketId, peer]),
+            ),
+          );
           setStatus(
             joined.peers.length
               ? `${joined.peers.length + 1} people in the call`
@@ -364,6 +389,10 @@ function GroupsCalls() {
       <div className="col-span-8 flex gap-2">
         <div className="flex relative flex-col items-center pt-7 pb-20 w-20 border bg-color4 rounded-3xl shrink-0">
           <Avatar className="h-11 w-11 shrink-0">
+            <AvatarImage
+              src={normalizeMediaUrl(currentUser?.avatarUrl)}
+              alt="Your profile picture"
+            />
             <AvatarFallback>
               {initials(currentUser?.fullName ?? "You")}
             </AvatarFallback>
@@ -445,6 +474,15 @@ function GroupsCalls() {
             ) : (
               <div className="h-full flex items-center justify-center text-white">
                 <Avatar className="h-24 w-24">
+                  <AvatarImage
+                    src={normalizeMediaUrl(
+                      callPeers[primaryStream?.socketId ?? ""]?.avatarUrl,
+                    )}
+                    alt={
+                      callPeers[primaryStream?.socketId ?? ""]?.fullName ??
+                      "Participant profile picture"
+                    }
+                  />
                   <AvatarFallback>G</AvatarFallback>
                 </Avatar>
               </div>
@@ -496,6 +534,15 @@ function GroupsCalls() {
                 ) : (
                   <div className="h-full flex items-center justify-center">
                     <Avatar className="h-20 w-20">
+                      <AvatarImage
+                        src={normalizeMediaUrl(
+                          callPeers[remote.socketId]?.avatarUrl,
+                        )}
+                        alt={
+                          callPeers[remote.socketId]?.fullName ??
+                          "Participant profile picture"
+                        }
+                      />
                       <AvatarFallback>P</AvatarFallback>
                     </Avatar>
                   </div>
@@ -515,6 +562,15 @@ function GroupsCalls() {
                     />
                   ) : (
                     <Avatar className="h-full w-full">
+                      <AvatarImage
+                        src={normalizeMediaUrl(
+                          callPeers[remote.socketId]?.avatarUrl,
+                        )}
+                        alt={
+                          callPeers[remote.socketId]?.fullName ??
+                          "Participant profile picture"
+                        }
+                      />
                       <AvatarFallback>P</AvatarFallback>
                     </Avatar>
                   )}

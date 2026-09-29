@@ -50,6 +50,7 @@ const Feeds = () => {
   type FeedComment = {
     id: string;
     authorName: string;
+    authorAvatarUrl?: string | null;
     body: string;
     createdAt: string;
   };
@@ -57,6 +58,7 @@ const Feeds = () => {
   type FeedPost = {
     id: string;
     authorName: string;
+    authorAvatarUrl?: string | null;
     authorHandle: string;
     message: string;
     mediaType?: "image" | "video";
@@ -118,6 +120,7 @@ const Feeds = () => {
         const loadedPosts = response.posts.map((post) => ({
           id: post.id,
           authorName: post.author?.fullName ?? "Community member",
+          authorAvatarUrl: post.author?.avatarUrl,
           authorHandle: `@${(post.author?.fullName ?? "member")
             .trim()
             .toLowerCase()
@@ -131,6 +134,7 @@ const Feeds = () => {
           comments: (post.comments ?? []).map((comment) => ({
             id: comment.id,
             authorName: comment.author?.fullName ?? "Community member",
+            authorAvatarUrl: comment.author?.avatarUrl,
             body: comment.body,
             createdAt: new Date(comment.createdAt).toLocaleString(),
           })),
@@ -552,7 +556,10 @@ const Feeds = () => {
                 </div>
                 <div className="bg-white h-11 w-11 rounded-full absolute left-1/2 -translate-x-1/2 top-7 flex justify-center items-center shadow-sm transition-transform duration-300 group-hover:scale-110">
                   <Avatar className="h-9 w-9 shrink-0">
-                    <AvatarImage src="https://github.com/shadcn.png" />
+                    <AvatarImage
+                      src={normalizeMediaUrl(currentUser?.avatarUrl)}
+                      alt="Your profile picture"
+                    />
                     <AvatarFallback>
                       {currentUser?.fullName
                         ?.split(" ")
@@ -615,8 +622,9 @@ const Feeds = () => {
                   const Icon = item.icon;
                   return (
                     <button
+                      onClick={() => item.link == "home" ? window.location.href = "/home" : null}
                       key={idx}
-                      className="flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all duration-200 hover:bg-black/5 dark:hover:bg-white/5 hover:translate-x-1 active:scale-95"
+                      className="flex items-center w-full gap-2 p-2 rounded-lg cursor-pointer transition-all duration-200 hover:bg-black/5 dark:hover:bg-white/5 hover:translate-x-1 active:scale-95"
                     >
                       <Icon
                         height="1em"
@@ -642,8 +650,7 @@ const Feeds = () => {
                   >
                     <div className="flex items-center gap-2 min-w-0">
                       <Avatar className="h-8 w-8 shrink-0 transition-transform duration-200 hover:scale-110">
-                        <AvatarImage src="https://github.com/shadcn.png" />
-                        <AvatarFallback>CN</AvatarFallback>
+                        <AvatarFallback>GK</AvatarFallback>
                       </Avatar>
                       <div className="truncate">
                         <p className="text-[8px] font-bold truncate">
@@ -669,8 +676,17 @@ const Feeds = () => {
             <div className="min-h-20 border rounded-2xl border-color1 py-2 px-3 sm:px-5 transition-all duration-300 hover:shadow-md hover:-translate-y-0.5 shrink-0">
               <div className="flex items-center gap-2 sm:gap-4 rounded-2xl">
                 <Avatar className="h-8 w-8 shrink-0 transition-transform duration-200 hover:scale-110 cursor-pointer">
-                  <AvatarImage src="https://github.com/shadcn.png" />
-                  <AvatarFallback>CN</AvatarFallback>
+                  <AvatarImage
+                    src={normalizeMediaUrl(currentUser?.avatarUrl)}
+                    alt="Your profile picture"
+                  />
+                  <AvatarFallback>
+                    {currentUser?.fullName
+                      ?.split(/\s+/)
+                      .slice(0, 2)
+                      .map((part) => part[0]?.toUpperCase() ?? "")
+                      .join("") || "U"}
+                  </AvatarFallback>
                 </Avatar>
                 <div className="bg-[#DCDFE5] w-full min-h-8 flex rounded-2xl px-4 sm:px-7 items-center relative transition-all duration-200 focus-within:ring-2 focus-within:ring-[#1900FF]/40 focus-within:bg-white">
                   <textarea
@@ -692,13 +708,13 @@ const Feeds = () => {
                     <img
                       src={composerMediaUrl}
                       alt="Selected post preview"
-                      className="h-40 w-full object-cover rounded-lg"
+                      className="h-auto max-h-72 w-full rounded-lg object-contain"
                     />
                   ) : (
                     <video
                       src={composerMediaUrl}
                       controls
-                      className="h-40 w-full object-cover rounded-lg bg-black"
+                      className="h-auto max-h-72 w-full rounded-lg bg-black object-contain"
                     />
                   )}
                 </div>
@@ -840,8 +856,17 @@ const Feeds = () => {
                   <div className="flex justify-between items-start gap-2">
                     <div className="flex gap-3">
                       <Avatar className="h-8 w-8 shrink-0 transition-transform duration-200 hover:scale-110 cursor-pointer">
-                        <AvatarImage src="https://github.com/shadcn.png" />
-                        <AvatarFallback>CN</AvatarFallback>
+                        <AvatarImage
+                          src={normalizeMediaUrl(post.authorAvatarUrl)}
+                          alt={`${post.authorName} profile picture`}
+                        />
+                        <AvatarFallback>
+                          {post.authorName
+                            .split(/\s+/)
+                            .slice(0, 2)
+                            .map((part) => part[0]?.toUpperCase() ?? "")
+                            .join("") || "U"}
+                        </AvatarFallback>
                       </Avatar>
                       <div>
                         <p className="text-xs font-semibold">
@@ -859,21 +884,21 @@ const Feeds = () => {
                   </div>
 
                   {post.mediaType === "image" && post.mediaUrl && (
-                    <div className="overflow-hidden rounded-xl mt-3">
+                    <div className="mt-3 overflow-hidden rounded-xl bg-black/5">
                       <img
                         src={post.mediaUrl}
-                        className="h-48 w-full object-cover rounded-xl transition-transform duration-500 hover:scale-105 cursor-pointer"
+                        className="h-auto max-h-[75vh] w-full rounded-xl object-contain"
                         alt="Post media"
                       />
                     </div>
                   )}
 
                   {post.mediaType === "video" && post.mediaUrl && (
-                    <div className="overflow-hidden rounded-xl mt-3">
+                    <div className="mt-3 overflow-hidden rounded-xl bg-black">
                       <video
                         src={post.mediaUrl}
                         controls
-                        className="h-48 w-full object-cover rounded-xl bg-black"
+                        className="h-auto max-h-[75vh] w-full rounded-xl object-contain"
                       />
                     </div>
                   )}
@@ -967,6 +992,10 @@ const Feeds = () => {
                           className="flex gap-2 items-start"
                         >
                           <Avatar className="h-6 w-6 shrink-0">
+                            <AvatarImage
+                              src={normalizeMediaUrl(comment.authorAvatarUrl)}
+                              alt={`${comment.authorName} profile picture`}
+                            />
                             <AvatarFallback className="text-[8px]">
                               {comment.authorName
                                 .split(" ")
@@ -991,8 +1020,17 @@ const Feeds = () => {
 
                   <div className="flex gap-3 items-center">
                     <Avatar className="h-8 w-8 shrink-0 transition-transform duration-200 hover:scale-110 cursor-pointer">
-                      <AvatarImage src="https://github.com/shadcn.png" />
-                      <AvatarFallback>CN</AvatarFallback>
+                      <AvatarImage
+                        src={normalizeMediaUrl(currentUser?.avatarUrl)}
+                        alt="Your profile picture"
+                      />
+                      <AvatarFallback>
+                        {currentUser?.fullName
+                          ?.split(/\s+/)
+                          .slice(0, 2)
+                          .map((part) => part[0]?.toUpperCase() ?? "")
+                          .join("") || "U"}
+                      </AvatarFallback>
                     </Avatar>
                     <div className="w-full relative">
                       <input
@@ -1109,8 +1147,17 @@ const Feeds = () => {
                   >
                     <div className="flex items-center gap-2 min-w-0">
                       <Avatar className="h-8 w-8 shrink-0 transition-transform duration-200 hover:scale-110 cursor-pointer">
-                        <AvatarImage src="https://github.com/shadcn.png" />
-                        <AvatarFallback>CN</AvatarFallback>
+                        <AvatarImage
+                          src={normalizeMediaUrl(person.avatarUrl)}
+                          alt={`${person.fullName} profile picture`}
+                        />
+                        <AvatarFallback>
+                          {person.fullName
+                            .split(/\s+/)
+                            .slice(0, 2)
+                            .map((part) => part[0]?.toUpperCase() ?? "")
+                            .join("") || "U"}
+                        </AvatarFallback>
                       </Avatar>
                       <div className="truncate">
                         <p className="text-[8px] font-bold truncate">

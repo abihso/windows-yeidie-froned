@@ -12,8 +12,32 @@ import DiscoverLightIcon from "@iconify-react/iconamoon/discover-light";
 import SaveAddIcon from "@iconify-react/reicon/save-add";
 import ProfileLightIcon from "@iconify-react/iconamoon/profile-light";
 import PlusIcon from "@iconify-react/akar-icons/plus";
+import { useEffect, useState } from "react";
+import { api, normalizeMediaUrl, type Counsellor } from "../../../lib/api";
 
 const Discover = () => {
+  const [counsellors, setCounsellors] = useState<Counsellor[]>([]);
+  const [loadingCounsellors, setLoadingCounsellors] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .counsellors()
+      .then((response) => {
+        if (!cancelled) setCounsellors(response.counsellors);
+      })
+      .catch(() => {
+        if (!cancelled) setCounsellors([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingCounsellors(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const categories = [
     { label: "Health & Wellness" },
     { label: "Education" },
@@ -125,30 +149,53 @@ const Discover = () => {
 
             {/* Posts Grid Container */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-[#f3f7ff] md:col-span-8 lg:col-span-9 xl:col-span-10 border border-[#A19EFF] rounded-2xl p-3 sm:p-5">
-              {[Images[4], Images[8], Images[7], Images[9], Images[9]].map(
-                (imgSrc, idx) => (
+              {loadingCounsellors ? (
+                <p className="col-span-full p-6 text-center text-sm text-gray-500">
+                  Loading counsellors...
+                </p>
+              ) : counsellors.length === 0 ? (
+                <p className="col-span-full p-6 text-center text-sm text-gray-500">
+                  No counsellors are available yet.
+                </p>
+              ) : (
+                counsellors.slice(0, 5).map((counsellor, idx) => (
                   <div
-                    key={idx}
+                    key={counsellor.id}
                     className="w-full bg-white border border-[#A19EFF] rounded-2xl overflow-hidden flex flex-col transition-all duration-300 hover:shadow-lg hover:-translate-y-1"
                   >
                     <img
-                      src={imgSrc}
+                      src={
+                        [Images[4], Images[8], Images[7], Images[9], Images[9]][
+                          idx
+                        ]
+                      }
                       className="h-48 sm:h-56 w-full object-cover rounded-2xl"
-                      alt="Post media"
+                      alt="Counselling resource"
                     />
                     <div className="flex justify-between items-center px-4 mt-3 gap-2">
                       <div className="flex gap-2 items-center min-w-0">
                         <Avatar className="h-9 w-9 shrink-0">
-                          <AvatarImage src="https://github.com/shadcn.png" />
-                          <AvatarFallback>CN</AvatarFallback>
+                          <AvatarImage
+                            src={normalizeMediaUrl(counsellor.avatarUrl)}
+                            alt={`${counsellor.fullName} profile picture`}
+                          />
+                          <AvatarFallback>
+                            {counsellor.fullName
+                              .split(/\s+/)
+                              .slice(0, 2)
+                              .map((part) => part[0]?.toUpperCase() ?? "")
+                              .join("") || "CN"}
+                          </AvatarFallback>
                         </Avatar>
                         <div className="min-w-0">
                           <p className="font-bold text-xs text-[#010158] truncate">
-                            Mr. Godfred Kusi -{" "}
-                            <span className="text-red-500"> Mental Health</span>
+                            {counsellor.fullName} -{" "}
+                            <span className="text-red-500">
+                              {counsellor.specialties?.[0] ?? "Counsellor"}
+                            </span>
                           </p>
                           <p className="font-medium text-[10px] text-gray-500 truncate">
-                            @MentalhealthClass
+                            {counsellor.specialties?.join(", ") || "Counsellor"}
                           </p>
                         </div>
                       </div>
@@ -183,7 +230,7 @@ const Discover = () => {
                       </p>
                     </div>
                   </div>
-                ),
+                ))
               )}
             </div>
           </div>
@@ -225,7 +272,10 @@ const Discover = () => {
       <div className="fixed bottom-3 sm:bottom-5 left-0 right-0 flex justify-center z-50 pointer-events-none px-4">
         <div className="h-14 sm:h-16 w-full max-w-md sm:w-auto px-4 sm:px-8 shadow-xl hover:shadow-2xl hover:shadow-[#1900FF]/15 bg-white/90 hover:bg-white backdrop-blur-md border border-gray-200 hover:border-[#A19EFF] rounded-full flex items-center justify-around sm:justify-center gap-1 sm:gap-4 pointer-events-auto transition-all duration-300 ease-in-out hover:-translate-y-1">
           {/* Home Button */}
-          <Button onClick={() => window.location.href = "/home"}  className="group flex-col bg-transparent h-fit p-1.5 sm:p-2.5 hover:bg-[#EDEBFF]/60 rounded-2xl shadow-none border-none transition-all duration-200 hover:scale-105 active:scale-95">
+          <Button
+            onClick={() => (window.location.href = "/home")}
+            className="group flex-col bg-transparent h-fit p-1.5 sm:p-2.5 hover:bg-[#EDEBFF]/60 rounded-2xl shadow-none border-none transition-all duration-200 hover:scale-105 active:scale-95"
+          >
             <HomeBrokenIcon
               className="text-[#010158] group-hover:text-[#FFAE00] text-lg sm:text-xl transition-transform duration-200 group-hover:-translate-y-0.5"
               height="1em"

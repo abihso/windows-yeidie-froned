@@ -14,6 +14,7 @@ import Messages from "./modules/dashboard/tabs/messages.tsx";
 import CallRoom from "./modules/dashboard/call-room/index.tsx";
 import TwoPeopleCall from "./modules/dashboard/call-room/two-people-call.tsx";
 import GroupsCalls from "./modules/dashboard/call-room/groups-call.tsx";
+import Profile from "./modules/Auth/profile.tsx"; 
 import { CallProvider } from "./features/calls/call-provider.tsx";
 
 createRoot(document.getElementById("root")!).render(
@@ -34,6 +35,7 @@ createRoot(document.getElementById("root")!).render(
           <Route path="/callroom/session" element={<CallRoom />} />
           <Route path="/callroom/two-people-call" element={<TwoPeopleCall />} />
           <Route path="/callroom/groups-call" element={<GroupsCalls />} />
+          <Route path="/profile" element={<Profile />} />
         </Routes>
       </CallProvider>
     </BrowserRouter>

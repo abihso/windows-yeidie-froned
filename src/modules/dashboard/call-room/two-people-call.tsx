@@ -15,8 +15,8 @@ import {
 } from "lucide-react";
 import type { Socket } from "socket.io-client";
 import { useCalls } from "../../../features/calls/call-context";
-import { api } from "../../../lib/api";
-import type { CallRoom as CallRecord } from "../../../lib/api";
+import { api, normalizeMediaUrl } from "../../../lib/api";
+import type { CallRoom as CallRecord, User } from "../../../lib/api";
 import { createCallClient } from "../../../lib/webrtc-client";
 import type { CallClient } from "../../../lib/webrtc-client";
 
@@ -193,6 +193,7 @@ function CallSession({ callId }: { callId: string }) {
     .toUpperCase();
   const [message, setMessage] = useState("");
   const [room, setRoom] = useState<CallRecord | null>(null);
+  const [peerUser, setPeerUser] = useState<User | null>(null);
   const [phase, setPhase] = useState<Phase>("loading");
   const [status, setStatus] = useState("Preparing your call…");
   const [error, setError] = useState("");
@@ -457,6 +458,44 @@ function CallSession({ callId }: { callId: string }) {
     };
   }, [socket, callId]);
 
+  useEffect(() => {
+    if (!room || !currentUser) return;
+    const currentUserId = currentUser.id;
+    let cancelled = false;
+
+    async function loadPeerProfile() {
+      try {
+        let peerId: string | undefined;
+        if (room?.conversationId) {
+          const { conversations } = await api.conversations();
+          const conversation = conversations.find(
+            (item) => item.id === room.conversationId,
+          );
+          peerId = conversation?.members.find(
+            (member) => member.id !== currentUserId,
+          )?.id;
+        } else if (room?.bookingId) {
+          const { bookings } = await api.bookings();
+          const booking = bookings.find((item) => item.id === room.bookingId);
+          peerId =
+            booking?.clientId === currentUserId
+              ? booking.counsellorId
+              : booking?.clientId;
+        }
+        if (!peerId) return;
+        const user = await api.user(peerId);
+        if (!cancelled) setPeerUser(user);
+      } catch {
+        if (!cancelled) setPeerUser(null);
+      }
+    }
+
+    void loadPeerProfile();
+    return () => {
+      cancelled = true;
+    };
+  }, [room, currentUser]);
+
   async function endCall() {
     if (ending) return;
     setEnding(true);
@@ -499,14 +538,25 @@ function CallSession({ callId }: { callId: string }) {
   const terminal = phase === "ended" || phase === "error";
   const video = room?.mode === "video";
   const canControl = Boolean(localStream) && !terminal && !ending;
+  const displayPeerName = peerUser?.fullName ?? peerName;
+  const displayPeerInitials = displayPeerName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part: string) => part[0])
+    .join("")
+    .toUpperCase();
 
   return (
     <div className="mobile-two-call grid gap-2 grid-cols-12 h-screen p-2 overflow-hidden">
       <div className="col-span-8 gap-2 h-full flex">
         <div className="flex relative flex-col items-center pt-7 pb-20 w-20 h-full border bg-color4 rounded-3xl shrink-0">
           <Avatar className="h-11 w-11 shrink-0 cursor-pointer">
-            <AvatarImage src="https://github.com/shadcn.png" />
-            <AvatarFallback>abihsolo</AvatarFallback>
+            <AvatarImage
+              src={normalizeMediaUrl(currentUser?.avatarUrl)}
+              alt="Your profile picture"
+            />
+            <AvatarFallback>{initials || "ME"}</AvatarFallback>
           </Avatar>
 
           <div className="border-t border-[#59595C] my-5 w-[40%]" />
@@ -555,7 +605,7 @@ function CallSession({ callId }: { callId: string }) {
                 <ArrowLeft className="h-5 w-5" />
               </button>
               <div>
-                <p className="text-xl text-[#000057]">{peerName}</p>
+                <p className="text-xl text-[#000057]">{displayPeerName}</p>
                 <div className="flex gap-10 mt-1">
                   <p className="text-xs">
                     {room ? (video ? "Video call" : "Audio call") : "Call room"}
@@ -589,7 +639,10 @@ function CallSession({ callId }: { callId: string }) {
             <div className="col-span-6 border border-[#ACA9FF] h-full rounded-2xl relative bg-black/5 overflow-hidden">
               <div className="absolute top-2 left-2 flex items-center gap-2 z-10">
                 <Avatar className="h-9 w-9 shrink-0 cursor-pointer">
-                  <AvatarImage src="https://github.com/shadcn.png" />
+                  <AvatarImage
+                    src={normalizeMediaUrl(currentUser?.avatarUrl)}
+                    alt="Your profile picture"
+                  />
                   <AvatarFallback>{initials || "ME"}</AvatarFallback>
                 </Avatar>
                 <div>
@@ -622,7 +675,7 @@ function CallSession({ callId }: { callId: string }) {
                     <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[#1900FF]/20 text-3xl font-bold text-[#dfe3ff] ring-8 ring-white/10">
                       {initials || <Phone size={30} />}
                     </div>
-                    <p className="text-lg font-semibold">{peerName}</p>
+                    <p className="text-lg font-semibold">You</p>
                     <p className="text-sm text-slate-200">{status}</p>
                   </div>
                 </div>
@@ -669,11 +722,14 @@ function CallSession({ callId }: { callId: string }) {
             <div className="col-span-6 border border-[#ACA9FF] h-full rounded-2xl relative bg-black/5 overflow-hidden">
               <div className="absolute top-2 left-2 flex items-center gap-2 z-10">
                 <Avatar className="h-9 w-9 shrink-0 cursor-pointer">
-                  <AvatarImage src="https://github.com/shadcn.png" />
-                  <AvatarFallback>{initials || "CN"}</AvatarFallback>
+                  <AvatarImage
+                    src={normalizeMediaUrl(peerUser?.avatarUrl)}
+                    alt={`${displayPeerName} profile picture`}
+                  />
+                  <AvatarFallback>{displayPeerInitials || "CN"}</AvatarFallback>
                 </Avatar>
                 <div>
-                  <p className="text-xs">{peerName}</p>
+                  <p className="text-xs">{displayPeerName}</p>
                   <p className="text-[10px]">
                     {remote ? "Connected" : "Waiting"}
                   </p>
@@ -697,9 +753,9 @@ function CallSession({ callId }: { callId: string }) {
                 <div className="absolute inset-0 z-10 flex items-center justify-center text-center text-white">
                   <div className="flex max-w-xs flex-col items-center gap-3 px-6 py-8">
                     <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[#1900FF]/20 text-3xl font-bold text-[#dfe3ff] ring-8 ring-white/10">
-                      {initials || <Phone size={30} />}
+                      {displayPeerInitials || <Phone size={30} />}
                     </div>
-                    <p className="text-lg font-semibold">{peerName}</p>
+                    <p className="text-lg font-semibold">{displayPeerName}</p>
                     <p className="text-sm text-slate-200">{status}</p>
                   </div>
                 </div>
@@ -739,8 +795,13 @@ function CallSession({ callId }: { callId: string }) {
                 >
                   {!outgoing && (
                     <Avatar className="h-8 w-8 shrink-0">
-                      <AvatarImage src="https://github.com/shadcn.png" />
-                      <AvatarFallback>{initials || "CN"}</AvatarFallback>
+                      <AvatarImage
+                        src={normalizeMediaUrl(peerUser?.avatarUrl)}
+                        alt={`${displayPeerName} profile picture`}
+                      />
+                      <AvatarFallback>
+                        {displayPeerInitials || "CN"}
+                      </AvatarFallback>
                     </Avatar>
                   )}
                   <div
@@ -754,7 +815,10 @@ function CallSession({ callId }: { callId: string }) {
                   </div>
                   {outgoing && (
                     <Avatar className="h-8 w-8 shrink-0">
-                      <AvatarImage src="https://github.com/shadcn.png" />
+                      <AvatarImage
+                        src={normalizeMediaUrl(currentUser?.avatarUrl)}
+                        alt="Your profile picture"
+                      />
                       <AvatarFallback>ME</AvatarFallback>
                     </Avatar>
                   )}

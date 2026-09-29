@@ -3,12 +3,13 @@ import { Icon } from "@iconify/react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Images } from "../../assets/images";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent, MouseEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   api,
+  normalizeMediaUrl,
   type AvailabilitySlot,
   type Booking,
   type Counsellor,
@@ -17,10 +18,12 @@ import {
 } from "../../lib/api";
 import Calendar from "../../components/calendar";
 import { MobileBottomNav } from "../../components/mobile-bottom-nav";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useCalls } from "../../features/calls/call-context";
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const { socket, connected } = useCalls();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [user, setUser] = useState<User | null>(null);
   const [allUsers, setAllUsers] = useState<User[]>([]);
@@ -50,6 +53,7 @@ const Dashboard = () => {
   const [updatingBookingIds, setUpdatingBookingIds] = useState<string[]>([]);
   const updatingBookingIdsRef = useRef(new Set<string>());
   const [dashboardLoading, setDashboardLoading] = useState(true);
+  const [liveNotice, setLiveNotice] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -139,6 +143,110 @@ const Dashboard = () => {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!socket || !user) return;
+    let disposed = false;
+
+    const syncBookings = () => {
+      void api
+        .bookings()
+        .then((result) => {
+          if (disposed) return;
+          setBookings(
+            user.role === "admin"
+              ? result.bookings
+              : result.bookings.filter(
+                  (booking) =>
+                    booking.clientId === user.id ||
+                    booking.counsellorId === user.id,
+                ),
+          );
+        })
+        .catch(() => {});
+    };
+
+    const upsertBooking = (incoming: Booking) => {
+      if (
+        user.role !== "admin" &&
+        incoming.clientId !== user.id &&
+        incoming.counsellorId !== user.id
+      ) {
+        return;
+      }
+      setBookings((current) => {
+        const found = current.some((booking) => booking.id === incoming.id);
+        return found
+          ? current.map((booking) =>
+              booking.id === incoming.id ? incoming : booking,
+            )
+          : [incoming, ...current];
+      });
+    };
+
+    const refreshAvailability = (counsellorId: string) => {
+      if (user.role === "counsellor" && user.id === counsellorId) {
+        void api
+          .counsellorAvailability(counsellorId)
+          .then((result) => setAvailableSlots(result.slots));
+      }
+      if (bookingOpen && selectedCounsellor?.id === counsellorId) {
+        void api
+          .counsellorAvailability(counsellorId)
+          .then((result) => setAvailability(result.slots));
+      }
+    };
+
+    const bookingCreated = (booking: Booking) => {
+      upsertBooking(booking);
+      if (booking.counsellorId === user.id && user.role === "counsellor") {
+        setLiveNotice(`New appointment request from ${booking.clientName}.`);
+      } else if (booking.clientId === user.id) {
+        setLiveNotice("Your appointment request was sent.");
+      }
+      refreshAvailability(booking.counsellorId);
+    };
+
+    const bookingUpdated = (booking: Booking) => {
+      upsertBooking(booking);
+      if (booking.status === "confirmed" && booking.clientId === user.id) {
+        setLiveNotice(`${booking.counsellorName} accepted your appointment.`);
+      } else if (booking.status === "cancelled") {
+        setLiveNotice("An appointment was cancelled.");
+      } else if (booking.status === "completed") {
+        setLiveNotice("An appointment was marked complete.");
+      }
+      refreshAvailability(booking.counsellorId);
+    };
+
+    const availabilityChanged = (change: { counsellorId: string }) => {
+      refreshAvailability(change.counsellorId);
+    };
+
+    socket.on("booking:created", bookingCreated);
+    socket.on("booking:updated", bookingUpdated);
+    socket.on("availability:created", availabilityChanged);
+    socket.on("availability:deleted", availabilityChanged);
+    socket.on("availability:changed", availabilityChanged);
+    socket.on("connect", syncBookings);
+    if (socket.connected) syncBookings();
+
+    return () => {
+      disposed = true;
+      socket.off("booking:created", bookingCreated);
+      socket.off("booking:updated", bookingUpdated);
+      socket.off("availability:created", availabilityChanged);
+      socket.off("availability:deleted", availabilityChanged);
+      socket.off("availability:changed", availabilityChanged);
+      socket.off("connect", syncBookings);
+    };
+  }, [socket, user, bookingOpen, selectedCounsellor?.id]);
+
+  useEffect(() => {
+    if (!liveNotice) return;
+    const timer = window.setTimeout(() => setLiveNotice(""), 5000);
+    return () => window.clearTimeout(timer);
+  }, [liveNotice]);
 
   useEffect(() => {
     const query = searchTerm.trim();
@@ -498,6 +606,23 @@ const Dashboard = () => {
 
   return (
     <div className="mobile-dashboard h-screen bg-[#f8fafc] overflow-x-hidden overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+      {liveNotice && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed right-4 top-4 z-[100] flex max-w-sm items-start gap-3 rounded-xl border border-[#D5E7FF] bg-white px-4 py-3 text-sm text-[#000057] shadow-lg"
+        >
+          <span className="min-w-0 flex-1">{liveNotice}</span>
+          <button
+            type="button"
+            onClick={() => setLiveNotice("")}
+            aria-label="Dismiss notification"
+            className="rounded p-1 text-slate-500 hover:bg-slate-100"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+      )}
       {/* Top Header Section */}
       <div className="mobile-dashboard-header min-h-48 bg-[#e5e5e5e3] px-3 sm:px-5 pb-5 overflow-visible">
         <div className="h-14 border-black flex flex-wrap lg:flex-nowrap justify-between items-center w-full gap-2 overflow-visible">
@@ -542,6 +667,15 @@ const Dashboard = () => {
           {/* Right Notifications and Profile */}
           <div className="h-full flex items-center justify-end pt-5 shrink-0 ml-auto lg:ml-0">
             <div className="flex items-center gap-2 h-1/2">
+              <span
+                className={`hidden items-center gap-1.5 rounded-full px-2 py-1 text-[10px] font-semibold sm:inline-flex ${connected ? "text-emerald-700" : "text-amber-700"}`}
+              >
+                <span
+                  aria-hidden="true"
+                  className={`size-1.5 rounded-full ${connected ? "bg-emerald-500" : "bg-amber-500"}`}
+                />
+                {connected ? "Live" : "Reconnecting"}
+              </span>
               <Icon
                 icon="mingcute:notification-fill"
                 className="-mt-1 cursor-pointer shrink-0 transition-transform duration-200 hover:scale-125 hover:-rotate-12 active:scale-90"
@@ -555,7 +689,7 @@ const Dashboard = () => {
                 fontSize={22}
               />
               <div className="w-fit border-black shrink-0 transition-transform duration-200 hover:scale-105">
-                <ProfileMenu user={user} onUserUpdated={setUser} />
+                <ProfileMenu user={user} />
               </div>
             </div>
           </div>
@@ -779,6 +913,9 @@ const Dashboard = () => {
           {recentConversations.length ? (
             recentConversations.map((conversation) => {
               const latestMessage = conversation.latestMessage;
+              const otherMember = conversation.members.find(
+                (member) => member.id !== user?.id,
+              );
               return (
                 <button
                   key={conversation.id}
@@ -789,6 +926,14 @@ const Dashboard = () => {
                   className="h-14 w-full rounded-full p-2 mt-3 flex items-center gap-3 text-left transition-all duration-200 hover:bg-[#d8d6f0] hover:shadow-sm hover:translate-x-1 cursor-pointer group"
                 >
                   <Avatar className="h-10 w-10 shrink-0 transition-transform duration-200 group-hover:scale-110">
+                    <AvatarImage
+                      src={normalizeMediaUrl(
+                        conversation.kind === "direct"
+                          ? otherMember?.avatarUrl
+                          : undefined,
+                      )}
+                      alt={`${conversationName(conversation)} profile picture`}
+                    />
                     <AvatarFallback>
                       {conversationName(conversation).slice(0, 2).toUpperCase()}
                     </AvatarFallback>

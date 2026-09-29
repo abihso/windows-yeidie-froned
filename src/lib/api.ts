@@ -23,6 +23,7 @@ export type User = {
   fullName: string;
   email: string;
   role: "client" | "counsellor" | "admin";
+  avatarUrl?: string | null;
   bio?: string;
   specialties?: string[];
   followerCount?: number;
@@ -30,7 +31,10 @@ export type User = {
   isFollowing?: boolean;
 };
 
-export type Counsellor = Pick<User, "id" | "fullName" | "bio" | "specialties">;
+export type Counsellor = Pick<
+  User,
+  "id" | "fullName" | "bio" | "specialties" | "avatarUrl"
+>;
 
 export type AvailabilitySlot = {
   id: string;
@@ -57,6 +61,7 @@ export type ConversationMember = {
   id: string;
   fullName: string;
   role: string;
+  avatarUrl?: string | null;
   membershipRole: string;
 };
 
@@ -102,6 +107,7 @@ export type PostComment = {
     id: string;
     fullName: string;
     role: string;
+    avatarUrl?: string | null;
   };
 };
 
@@ -122,6 +128,7 @@ export type Post = {
     id: string;
     fullName: string;
     role: string;
+    avatarUrl?: string | null;
   };
 };
 
@@ -214,10 +221,26 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(input),
     }).then((body) => body.user),
+  uploadAvatar: (image: File) => {
+    const formData = new FormData();
+    formData.append("avatar", image);
+    return request<{ user: User }>("/users/me/avatar", {
+      method: "POST",
+      body: formData,
+    }).then((body) => body.user);
+  },
   changePassword: (currentPassword: string, newPassword: string) =>
     request<void>("/auth/password", {
       method: "PATCH",
       body: JSON.stringify({ currentPassword, newPassword }),
+    }),
+  deleteAccount: (password: string) =>
+    request<void>("/auth/account", {
+      method: "DELETE",
+      body: JSON.stringify({ password }),
+    }).then(() => {
+      csrfToken = null;
+      window.dispatchEvent(new Event("yiedie:session-change"));
     }),
   user: (id: string) =>
     request<{ user: User }>(`/users/${id}`).then((body) => body.user),

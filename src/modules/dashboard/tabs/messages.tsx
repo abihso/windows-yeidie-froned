@@ -28,7 +28,12 @@ import MenuDots16Icon from "@iconify-react/qlementine-icons/menu-dots-16";
 import PlusIcon from "@iconify-react/akar-icons/plus";
 import { useRef, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { api, type Conversation, type User } from "../../../lib/api";
+import {
+  api,
+  normalizeMediaUrl,
+  type Conversation,
+  type User,
+} from "../../../lib/api";
 import { useCalls } from "../../../features/calls/call-context";
 import { MobileBottomNav } from "../../../components/mobile-bottom-nav";
 
@@ -684,7 +689,6 @@ const MessagesPanel = () => {
       .join("") || "YO";
 
   const selectedContact = selectedUser;
-  const selectedDisplayName = selectedGroup?.title ?? selectedContact?.fullName;
   const callsDisabled = !selectedConversationId || !connected || busy;
 
   return (
@@ -771,7 +775,10 @@ const MessagesPanel = () => {
                 </div>
                 <div className="bg-white h-14 w-14 rounded-full absolute left-1/2 -translate-x-1/2 top-12 flex justify-center items-center shadow-sm transition-transform duration-300 group-hover:scale-110">
                   <Avatar className="h-12 w-12 shrink-0">
-                    <AvatarImage src="https://github.com/shadcn.png" />
+                    <AvatarImage
+                      src={normalizeMediaUrl(currentUser?.avatarUrl)}
+                      alt="Your profile picture"
+                    />
                     <AvatarFallback>{userInitials}</AvatarFallback>
                   </Avatar>
                 </div>
@@ -888,7 +895,10 @@ const MessagesPanel = () => {
                         }`}
                       >
                         <Avatar className="h-9 w-9 shrink-0 transition-transform duration-200 group-hover:scale-105">
-                          <AvatarImage src="https://github.com/shadcn.png" />
+                          <AvatarImage
+                            src={normalizeMediaUrl(person.avatarUrl)}
+                            alt={`${handleName} profile picture`}
+                          />
                           <AvatarFallback>
                             {handleName
                               .split(" ")
@@ -923,19 +933,18 @@ const MessagesPanel = () => {
             <div className="h-12 bg-color6 border border-[#ACA9FF] flex justify-between items-center px-5 shrink-0">
               <div className="flex items-center gap-2 cursor-pointer group">
                 <Avatar className="h-10 w-10 shrink-0 transition-transform duration-200 group-hover:scale-105">
-                  <AvatarImage src="https://github.com/shadcn.png" />
-                  <AvatarFallback>CN</AvatarFallback>
+                  <AvatarImage
+                    src={normalizeMediaUrl(currentUser?.avatarUrl)}
+                    alt="Your profile picture"
+                  />
+                  <AvatarFallback>{userInitials}</AvatarFallback>
                 </Avatar>
                 <div>
                   <p className="text-[10px] font-extrabold transition-colors text-white group-hover:text-[#eeeeefa1]">
-                    {selectedDisplayName ??
-                      currentUser?.fullName ??
-                      "Select a contact"}
+                    {currentUser?.fullName ?? "Your profile"}
                   </p>
                   <p className="text-[8px] text-gray-500">
-                    {selectedGroup
-                      ? `${selectedGroup.members.length} members`
-                      : `@${selectedContact?.email?.split("@")[0] ?? currentUser?.email?.split("@")[0] ?? "user"}`}
+                    {currentUser?.email ?? ""}
                   </p>
                 </div>
               </div>
@@ -985,6 +994,14 @@ const MessagesPanel = () => {
                 ) : (
                   messages.map((message) => {
                     const isOutgoing = message.senderId === currentUser?.id;
+                    const sender = selectedGroup?.members.find(
+                      (member) => member.id === message.senderId,
+                    );
+                    const senderAvatarUrl = isOutgoing
+                      ? currentUser?.avatarUrl
+                      : selectedGroup
+                        ? sender?.avatarUrl
+                        : selectedContact?.avatarUrl;
                     const attachmentEndpoint = message.attachmentUrl
                       ? `${API_BASE_URL}/conversations/${encodeURIComponent(message.conversationId)}/messages/${encodeURIComponent(message.id)}/attachment`
                       : "";
@@ -1006,7 +1023,10 @@ const MessagesPanel = () => {
                       >
                         {!isOutgoing && (
                           <Avatar className="h-9 w-9 shrink-0 transition-transform duration-200 hover:scale-110 cursor-pointer">
-                            <AvatarImage src="https://github.com/shadcn.png" />
+                            <AvatarImage
+                              src={normalizeMediaUrl(senderAvatarUrl)}
+                              alt={`${sender?.fullName ?? selectedContact?.fullName ?? "Sender"} profile picture`}
+                            />
                             <AvatarFallback>
                               {selectedContact?.fullName
                                 ?.split(" ")
@@ -1131,7 +1151,10 @@ const MessagesPanel = () => {
 
                         {isOutgoing && (
                           <Avatar className="h-9 w-9 shrink-0 transition-transform duration-200 hover:scale-110 cursor-pointer">
-                            <AvatarImage src="https://github.com/shadcn.png" />
+                            <AvatarImage
+                              src={normalizeMediaUrl(currentUser?.avatarUrl)}
+                              alt="Your profile picture"
+                            />
                             <AvatarFallback>{userInitials}</AvatarFallback>
                           </Avatar>
                         )}
