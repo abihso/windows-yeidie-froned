@@ -226,7 +226,7 @@ function Profile() {
   return (
     <div className="min-h-screen relative flex justify-center py-8">
       <div className="w-[80%] grid grid-cols-12 gap-4 items-stretch">
-        <div className="col-span-2 border rounded-3xl p-4 flex flex-col justify-between h-full">
+        <div className="col-span-2 border rounded-3xl p-4 flex flex-col justify-between h-full shadow-sm bg-white">
           <div className="flex flex-col gap-5">
             <button
               type="button"
@@ -284,7 +284,7 @@ function Profile() {
               </p>
             )}
 
-            <div className="h-24 flex gap-2 items-center px-7 rounded-2xl mt-4 border border-[#D5E7FF] bg-[#EBF3FF]">
+            <div className="h-24 flex gap-2 items-center px-7 rounded-2xl mt-4 border border-[#D5E7FF] bg-[#EBF3FF] shadow-sm">
               <div className="relative">
                 <Avatar className="h-18 w-18 shrink-0">
                   <AvatarImage
@@ -299,7 +299,7 @@ function Profile() {
                   title="Change profile picture"
                   disabled={!user || loading || avatarUploading}
                   onClick={() => avatarInputRef.current?.click()}
-                  className="absolute flex h-6 w-6 items-center justify-center rounded-md bg-[#010DE2] text-white bottom-1 -right-1 disabled:opacity-60"
+                  className="absolute flex h-6 w-6 items-center justify-center rounded-md bg-[#010DE2] text-white bottom-1 -right-1 disabled:opacity-60 shadow-sm"
                 >
                   {avatarUploading ? (
                     <LoaderCircle className="h-3 w-3 animate-spin" />
@@ -331,7 +331,7 @@ function Profile() {
 
             {activeSection === "profile" ? (
               <form onSubmit={saveProfile}>
-                <div className="p-4 border rounded-2xl mt-4">
+                <div className="p-4 border rounded-2xl mt-4 shadow-sm bg-white">
                   <div className="flex justify-between items-center mt-4">
                     <p>Personal Information</p>
                     {editing && (
@@ -442,7 +442,7 @@ function Profile() {
                 </div>
 
                 <div className="grid grid-cols-12 gap-4 mt-4">
-                  <div className="col-span-6 border rounded-2xl p-4">
+                  <div className="col-span-6 border rounded-2xl p-4 shadow-sm bg-white">
                     <div className="flex justify-between items-center">
                       <p>Personal Address</p>
                       <Button
@@ -491,7 +491,7 @@ function Profile() {
                     </div>
                   </div>
 
-                  <div className="col-span-6 border rounded-2xl p-4">
+                  <div className="col-span-6 border rounded-2xl p-4 shadow-sm bg-white">
                     <div className="flex justify-between items-center">
                       <p>Parent / Guardian</p>
                       <Button
@@ -542,7 +542,7 @@ function Profile() {
                 </div>
               </form>
             ) : (
-              <section className="p-4 border rounded-2xl mt-4">
+              <section className="p-4 border rounded-2xl mt-4 shadow-sm bg-white">
                 <h2 className="font-bold">Change Password</h2>
                 <p className="mt-1 text-xs font-normal text-[#7A7B7B]">
                   Enter your current password and choose a new one.
@@ -627,7 +627,7 @@ function Profile() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="delete-account-title"
-            className="w-full max-w-md rounded-2xl border bg-white p-6 shadow-xl"
+            className="w-full max-w-md rounded-2xl border bg-white p-6 shadow-2xl"
           >
             <h2 id="delete-account-title" className="font-bold text-red-700">
               Delete Account
