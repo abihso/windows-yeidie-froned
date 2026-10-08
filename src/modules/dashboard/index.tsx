@@ -7,6 +7,7 @@ import { ChevronRight, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent, MouseEvent } from "react";
 import { useNavigate } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   api,
   normalizeMediaUrl,
@@ -54,6 +55,12 @@ const Dashboard = () => {
   const updatingBookingIdsRef = useRef(new Set<string>());
   const [dashboardLoading, setDashboardLoading] = useState(true);
   const [liveNotice, setLiveNotice] = useState("");
+
+  // Profile dropdown hover state
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+
+  const navItems = ["Dashboard", "Why Yiedie", "How it works", "Pricing"];
+  const [activeNav, setActiveNav] = useState("Dashboard");
 
   useEffect(() => {
     let cancelled = false;
@@ -519,8 +526,6 @@ const Dashboard = () => {
     }
   }
 
-  const [activeTab, setActiveTab] = useState("Dashboard-0");
-
   const [isDragging, setIsDragging] = useState(false);
   const [startX, setStartX] = useState(0);
   const [scrollLeftState, setScrollLeftState] = useState(0);
@@ -547,8 +552,6 @@ const Dashboard = () => {
     const walk = (x - startX) * 2;
     scrollRef.current.scrollLeft = scrollLeftState - walk;
   };
-
-  const navItems = ["Dashboard", "Why Yiedie", "How it works", "Pricing"];
 
   const sidebarGroups = [
     [
@@ -605,103 +608,213 @@ const Dashboard = () => {
   }
 
   return (
-    <div className="mobile-dashboard h-screen bg-[#f8fafc] overflow-x-hidden overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-      {liveNotice && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="fixed right-4 top-4 z-[100] flex max-w-sm items-start gap-3 rounded-xl border border-[#D5E7FF] bg-white px-4 py-3 text-sm text-[#000057] shadow-lg"
-        >
-          <span className="min-w-0 flex-1">{liveNotice}</span>
-          <button
-            type="button"
-            onClick={() => setLiveNotice("")}
-            aria-label="Dismiss notification"
-            className="rounded p-1 text-slate-500 hover:bg-slate-100"
+    <div className="mobile-dashboard h-screen bg-[#f8fafc] overflow-x-hidden overflow-y-auto scrollbar-none [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+      <AnimatePresence>
+        {liveNotice && (
+          <motion.div
+            initial={{ opacity: 0, y: -20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.95 }}
+            transition={{ duration: 0.2 }}
+            role="status"
+            aria-live="polite"
+            className="fixed right-4 top-4 z-100 flex max-w-sm items-start gap-3 rounded-xl border border-[#D5E7FF] bg-white px-4 py-3 text-sm text-[#000057] shadow-lg"
           >
-            <X className="size-4" />
-          </button>
-        </div>
-      )}
+            <span className="min-w-0 flex-1">{liveNotice}</span>
+            <button
+              type="button"
+              onClick={() => setLiveNotice("")}
+              aria-label="Dismiss notification"
+              className="rounded p-1 text-slate-500 hover:bg-slate-100"
+            >
+              <X className="size-4" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Top Header Section */}
-      <div className="mobile-dashboard-header min-h-48 bg-[#e5e5e5e3] px-3 sm:px-5 pb-5 overflow-visible">
-        <div className="h-14 border-black flex flex-wrap lg:flex-nowrap justify-between items-center w-full gap-2 overflow-visible">
-          {/* Left Navigation and Logo */}
-          <div className="h-full flex items-center gap-2 sm:gap-4 overflow-x-auto lg:overflow-visible scrollbar-none w-full lg:w-auto">
-            <div className="bg-white mt-9 w-fit p-2 rounded-2xl h-16 shrink-0 flex items-center justify-center relative z-50 shadow-md transition-transform duration-300 hover:scale-105 cursor-pointer">
-              <img
-                src={Images[0]}
-                alt=""
-                className="w-10 h-10 object-contain"
-              />
+      <div className="mobile-dashboard-header min-h-48 bg-white px-3 sm:px-5 pb-5 overflow-visible">
+        <div className="pt-2 flex items-center justify-center relative">
+          <div className="w-[94%] h-12 border pl-10 rounded-3xl bg-[#ECF0FA] flex justify-between items-center">
+            <div className="flex gap-7">
+              {navItems.map((item) => (
+                <p
+                  key={item}
+                  onClick={() => setActiveNav(item)}
+                  className={`text-xs font-bold transition-colors duration-200 cursor-pointer hover:text-[#FF9001] ${
+                    activeNav === item ? "text-[#FF9001]" : "text-[#0A0332]"
+                  }`}
+                >
+                  {item}
+                </p>
+              ))}
             </div>
-
-            {/* Dynamic Navigation Tabs */}
-            <div className="mobile-dashboard-nav flex items-center gap-2 sm:gap-4">
-              {navItems.map((item, index) => {
-                const isActive = activeTab === `${item}-${index}`;
-                return (
-                  <div
-                    key={index}
-                    onMouseEnter={() => setActiveTab(`${item}-${index}`)}
-                    onClick={() => setActiveTab(`${item}-${index}`)}
-                    className={`border-t-4 transition-all duration-300 flex justify-center items-end h-full w-fit shrink-0 cursor-pointer ${
-                      isActive ? "border-[#A8A8AD]" : "border-transparent"
-                    }`}
-                  >
-                    <p
-                      className={`font-extrabold py-1 px-2 rounded-b-lg transition-all duration-200 text-xs sm:text-sm active:scale-95 select-none ${
-                        isActive
-                          ? "bg-[#A8A8AD] text-white -translate-y-0.5"
-                          : "text-[#000057] hover:text-[#1900FF]"
-                      }`}
-                    >
-                      {item}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Right Notifications and Profile */}
-          <div className="h-full flex items-center justify-end pt-5 shrink-0 ml-auto lg:ml-0">
-            <div className="flex items-center gap-2 h-1/2">
-              <span
-                className={`hidden items-center gap-1.5 rounded-full px-2 py-1 text-[10px] font-semibold sm:inline-flex ${connected ? "text-emerald-700" : "text-amber-700"}`}
+            <div className="flex gap-3 pr-4 items-center">
+              <motion.div
+                whileHover={{ scale: 1.15 }}
+                whileTap={{ scale: 0.95 }}
               >
-                <span
-                  aria-hidden="true"
-                  className={`size-1.5 rounded-full ${connected ? "bg-emerald-500" : "bg-amber-500"}`}
+                <Icon
+                  icon="griddy-icons:notification-new"
+                  className="text-[#010158] text-xl sm:text-2xl shrink-0 cursor-pointer"
                 />
-                {connected ? "Live" : "Reconnecting"}
-              </span>
-              <Icon
-                icon="mingcute:notification-fill"
-                className="-mt-1 cursor-pointer shrink-0 transition-transform duration-200 hover:scale-125 hover:-rotate-12 active:scale-90"
-                color="#09024B"
-                fontSize={22}
-              />
-              <Icon
-                icon="mage:message-fill"
-                className="-mt-1 cursor-pointer shrink-0 transition-transform duration-200 hover:scale-125 hover:rotate-12 active:scale-90"
-                color="#09024B"
-                fontSize={22}
-              />
-              <div className="w-fit border-black shrink-0 transition-transform duration-200 hover:scale-105">
-                <ProfileMenu user={user} />
+              </motion.div>
+              <motion.div
+                whileHover={{ scale: 1.15 }}
+                whileTap={{ scale: 0.95 }}
+              >
+                <Icon
+                  icon="boxicons:message-circle-notification"
+                  className="text-[#010158] text-xl sm:text-2xl shrink-0 cursor-pointer"
+                />
+              </motion.div>
+
+              {/* Hover Trigger Container */}
+              <div
+                className="relative cursor-pointer py-2"
+                onMouseEnter={() => setIsProfileOpen(true)}
+                onMouseLeave={() => setIsProfileOpen(false)}
+              >
+                <motion.div
+                  whileHover={{ scale: 1.08 }}
+                  whileTap={{ scale: 0.95 }}
+                  className="w-7 h-7 flex justify-center items-center rounded-full bg-[#FF9001]"
+                >
+                  <Icon
+                    icon="ant-design:user-outlined"
+                    className="text-[#010158]"
+                  />
+                </motion.div>
+
+                {/* Animated Dropdown Menu */}
+                <AnimatePresence>
+                  {isProfileOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 8, scale: 0.95 }}
+                      transition={{ duration: 0.18, ease: "easeOut" }}
+                      className="p-4 min-h-78 rounded-xl bg-[#010158] absolute right-0 top-9 w-60 z-50 shadow-xl"
+                    >
+                      <div className="h-10 w-10 absolute right-2 -top-1 z-0 bg-[#010158] rotate-45" />
+                      <div
+                        onClick={() => (window.location.href = "/profile")}
+                        className="flex items-center gap-3 z-10 relative"
+                      >
+                        <Avatar>
+                          <AvatarImage src="https://github.com/shadcn.png" />
+                          <AvatarFallback>CN</AvatarFallback>
+                        </Avatar>
+                        <div className="text-white">
+                          <p className="text-xs font-bold">
+                            Mr. Godfred Kusi (mentor)
+                          </p>
+                          <p className="text-[8px]">
+                            antwiboasiakotheophilus88@gmail.com
+                          </p>
+                        </div>
+                      </div>
+                      <div className="h-10 rounded-md flex bg-white items-center justify-center mt-5">
+                        <p className="text-sm font-extrabold">
+                          Upgrade to Yiedie{" "}
+                          <span className="bg-[#FF9001] text-white p-2 rounded-md">
+                            Premium
+                          </span>
+                        </p>
+                      </div>
+                      <div
+                        onClick={() => (window.location.href = "/profile")}
+                        className="h-10 flex gap-5 items-center mt-2 cursor-pointer hover:bg-white/10 px-1 rounded-md transition-colors"
+                      >
+                        <Icon
+                          icon="iconamoon:profile-bold"
+                          className="text-white text-xl"
+                        />
+                        <div className="border-b border-[#453E3E] h-full flex items-center w-full">
+                          <p className="text-[#ACA9FF] text-xs">User Profile</p>
+                        </div>
+                      </div>
+                      <div className="h-10 flex gap-5 items-center mt-2 cursor-pointer hover:bg-white/10 px-1 rounded-md transition-colors">
+                        <Icon
+                          icon="famicons:language-sharp"
+                          className="text-white text-xl"
+                        />
+                        <div className="border-b border-[#453E3E] h-full flex justify-between items-center w-full">
+                          <p className="text-[#ACA9FF] text-xs">Language</p>
+                          <select
+                            className="bg-[#252566] text-[#ACA9FF] px-2 py-1 rounded-sm text-xs outline-none"
+                            name=""
+                            id=""
+                          >
+                            <option value="English">English</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div className="h-10 flex gap-5 items-center mt-2 cursor-pointer hover:bg-white/10 px-1 rounded-md transition-colors">
+                        <Icon
+                          icon="fluent:dark-theme-20-filled"
+                          className="text-white text-xl"
+                        />
+                        <div className="border-b border-[#453E3E] h-full flex items-center justify-between w-full">
+                          <p className="text-[#ACA9FF] text-xs">Theme</p>
+                          <select
+                            className="bg-[#252566] text-[#ACA9FF] px-2 py-1 rounded-sm text-xs outline-none"
+                            name=""
+                            id=""
+                          >
+                            <option value="English">System</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div className="h-10 flex gap-5 items-center mt-2 cursor-pointer hover:bg-white/10 px-1 rounded-md transition-colors">
+                        <Icon
+                          icon="griddy-icons:settings-filled"
+                          className="text-white text-xl"
+                        />
+                        <div className="border-b border-[#453E3E] h-full flex items-center w-full">
+                          <p className="text-[#ACA9FF] text-xs">Settings</p>
+                        </div>
+                      </div>
+                      <div className="h-10 flex gap-5 items-center mt-2 cursor-pointer hover:bg-white/10 px-1 rounded-md transition-colors">
+                        <Icon
+                          icon="simple-icons:openproject"
+                          className="text-white text-xl"
+                        />
+                        <div className="h-full flex items-center justify-between w-full">
+                          <p className="text-[#ACA9FF] text-xs">Manage plan</p>
+                          <p className="text-[#FF9001] text-xs">Free</p>
+                        </div>
+                      </div>
+                      <div className="flex gap-4 border-y border-[#453E3E] items-center h-10 cursor-pointer hover:bg-white/10 px-1 rounded-md transition-colors">
+                        <Icon
+                          icon="at-icons:arrow-uturn-left-up"
+                          className="text-white text-xl"
+                        />
+                        <p className="text-[#ACA9FF] text-xs">
+                          Switch to a Professional
+                        </p>
+                      </div>
+                      <div className="flex gap-4 items-center h-10 cursor-pointer hover:bg-white/10 px-1 rounded-md transition-colors">
+                        <Icon
+                          icon="solar:logout-3-bold-duotone"
+                          className="text-white text-xl"
+                        />
+                        <p className="text-[#ACA9FF] text-xs">Logout</p>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </div>
+          </div>
+          <div className="absolute left-0">
+            <img src={Images[0]} className="w-8" alt="" />
           </div>
         </div>
 
         {/* Hero Search Area */}
         <div className="mt-16 sm:mt-18">
-          <p className="text-[#000057] font-extrabold text-xl sm:text-3xl">
-            {user
-              ? `Welcome back, ${user.fullName}`
-              : "Loading your account..."}
-          </p>
           <p className="text-[#000057] font-extrabold text-xl sm:text-3xl">
             {user?.role === "admin"
               ? "Manage the platform and support your community"
@@ -715,14 +828,14 @@ const Dashboard = () => {
           {user?.role !== "admin" && (
             <form
               onSubmit={(event) => event.preventDefault()}
-              className="bg-color6 h-auto rounded-3xl sm:rounded-full mt-2 px-3 py-3 sm:py-2 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-sm transition-all duration-300 hover:shadow-md"
+              className="bg-[#ECF0FA] h-auto rounded-3xl sm:rounded-full mt-2 px-3 py-3 sm:py-2 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-sm transition-all duration-300 hover:shadow-md"
             >
               <div className="border-b sm:border-b-0 sm:border-r-2 h-auto sm:h-3/5 border-[#B6B6B6] pb-2 sm:pb-0 sm:pl-6 sm:pr-6 w-full sm:w-2/10 flex gap-4 items-center shrink-0">
                 <Icon
                   icon="ri:search-fill"
-                  className="text-white text-xl sm:text-2xl shrink-0 transition-transform duration-200 hover:scale-110"
+                  className="text-[#010158] text-xl sm:text-2xl shrink-0 transition-transform duration-200 hover:scale-110"
                 />
-                <p className="text-white text-sm whitespace-nowrap">
+                <p className="text-[#999999] text-sm whitespace-nowrap">
                   Counsellor search
                 </p>
               </div>
@@ -731,13 +844,13 @@ const Dashboard = () => {
                 <div className="relative flex items-center w-full h-12">
                   <Icon
                     icon="duo-icons:location"
-                    className="absolute left-4 text-xl sm:text-2xl text-white z-10 pointer-events-none"
+                    className="absolute left-4 text-xl sm:text-2xl text-[#010158] z-10 pointer-events-none"
                   />
                   <input
                     type="text"
                     value={searchTerm}
                     onChange={(event) => setSearchTerm(event.target.value)}
-                    className="w-full h-full text-white rounded-full pl-14 sm:pl-16 pr-4 bg-color6 sm:bg-transparent outline-none border sm:border-none text-sm transition-all duration-200 focus:bg-white focus:ring-2 focus:ring-[#1900FF]/30"
+                    className="w-full h-full text-[#999999] rounded-full pl-14 sm:pl-16 pr-4 bg-[#ECF0FA] sm:bg-transparent outline-none border sm:border-none text-sm transition-all duration-200 focus:bg-white focus:ring-2 focus:ring-[#1900FF]/30"
                     placeholder="Search by name or specialty"
                   />
                 </div>
@@ -746,7 +859,7 @@ const Dashboard = () => {
                   variant={"secondary"}
                   disabled={searching}
                   className={
-                    "bg-color5 hover:bg-[#1900ffb7] font-bold w-full sm:w-50 rounded-full h-12 text-white px-8 shrink-0 cursor-pointer transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 active:scale-95"
+                    "bg-[#010158] hover:bg-[#1900ffa6] font-bold w-full sm:w-50 rounded-full h-12 text-white px-8 shrink-0 cursor-pointer transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 active:scale-95"
                   }
                 >
                   {searching ? "Searching..." : "Search"}
@@ -789,13 +902,14 @@ const Dashboard = () => {
 
       {/* Categories Scroll & Banner Row */}
       <div className="flex flex-col xl:flex-row my-5 px-3 sm:px-5 items-stretch xl:items-center gap-4">
-        <div className="w-full xl:w-20 flex items-center justify-between gap-3 shrink-0">
-          <div className="bg-[#1900FF] w-fit rounded-lg p-1 transition-transform duration-200 hover:scale-105 shadow-sm">
-            <Icon
-              icon="material-symbols:dashboard-rounded"
-              className="w-10 h-10 text-white"
-            />
-          </div>
+        <div className="flex items-center justify-between gap-3 shrink-0">
+          <motion.div
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            className="bg-[#FF9001] h-15 w-15 rounded-2xl flex items-center justify-center shrink-0 shadow-sm cursor-pointer"
+          >
+            <Icon icon="hugeicons:menu-square" className="w-8 h-8 text-white" />
+          </motion.div>
         </div>
 
         <div
@@ -819,18 +933,23 @@ const Dashboard = () => {
             "Career",
             "Family",
           ].map((item, idx) => (
-            <Button
+            <motion.div
               key={idx}
-              variant="default"
-              className="shrink-0 text-[#010158] font-extrabold h-15 w-48 border border-[#A19EFF] rounded-2xl bg-[#EDEBFF] hover:bg-[#1900FF] hover:text-white shadow-none cursor-pointer transition-all duration-200 hover:-translate-y-0.5 active:scale-95"
+              whileHover={{ y: -2 }}
+              whileTap={{ scale: 0.96 }}
             >
-              {item}
-            </Button>
+              <Button
+                variant="default"
+                className="shrink-0 text-[#010158] font-extrabold h-15 w-48 border border-[#A19EFF] rounded-2xl bg-[#EDEBFF] hover:bg-[#1900FF] hover:text-white shadow-none cursor-pointer transition-colors"
+              >
+                {item}
+              </Button>
+            </motion.div>
           ))}
         </div>
 
         <div className="w-full xl:w-fit flex items-center justify-between xl:justify-start gap-2 px-2 shrink-0">
-          <div className="bg-color6 h-14 rounded-xl flex flex-col justify-center items-start px-6 sm:px-8 w-full xl:w-87.5 shadow-sm transition-all duration-300 hover:shadow-md hover:-translate-y-0.5 cursor-pointer">
+          <div className="bg-[#9AB3DA] h-14 rounded-xl flex flex-col justify-center items-start px-6 sm:px-8 w-full xl:w-87.5 shadow-sm transition-all duration-300 hover:shadow-md hover:-translate-y-0.5 cursor-pointer">
             <p className="text-xs sm:text-sm font-bold text-white truncate w-full">
               keep going to reach and improve even more.
             </p>
@@ -1361,7 +1480,13 @@ const Dashboard = () => {
 
       {bookingOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0A0332]/50 p-4">
-          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.2 }}
+            className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl"
+          >
             <div className="flex items-center justify-between gap-4">
               <div>
                 <h2 className="text-xl font-bold text-[#0A0332]">
@@ -1482,7 +1607,7 @@ const Dashboard = () => {
                 </Button>
               </form>
             )}
-          </div>
+          </motion.div>
         </div>
       )}
       <MobileBottomNav />
