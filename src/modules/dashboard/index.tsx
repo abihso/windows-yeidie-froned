@@ -1,4 +1,3 @@
-import { ProfileMenu } from "../../components/profile";
 import { Icon } from "@iconify/react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -24,7 +23,7 @@ import { useCalls } from "../../features/calls/call-context";
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const { socket, connected } = useCalls();
+  const { socket } = useCalls();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [user, setUser] = useState<User | null>(null);
   const [allUsers, setAllUsers] = useState<User[]>([]);
